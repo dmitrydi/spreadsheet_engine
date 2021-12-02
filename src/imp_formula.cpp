@@ -110,3 +110,11 @@ void ImpFormula::PopulatePtrs() {
       st.push(ch.get());
   }
 }
+
+std::unique_ptr<ImpFormula> ParseImpFormula(std::string expression) {
+  return nullptr;
+}
+
+std::unique_ptr<IFormula> ParseFormula(string expression) {
+  return nullptr;
+}
