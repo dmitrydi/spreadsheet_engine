@@ -5,16 +5,16 @@ using namespace std;
 using Value = ImpFormula::Value;
 
 Value ImpFormula::Evaluate(const ISheet& sheet) const {
-  if (valid)
-    return cached_val;
-  //cached_val = ast.get()->evaluate(sheet);
+//  if (valid)
+//    return cached_val;
+//  //cached_val = ast.get()->evaluate(sheet);
   visit(overload {
     [this](double val) { this->cached_val = val;},
     [this](const string& val) { this->cached_val = FormulaError(FormulaError::Category::Value); },
     [this](const FormulaError& err) { this->cached_val = err;}
   }, ast.get()->evaluate(sheet)
       );
-  valid = true;
+  //valid = true;
   return cached_val;
 }
 
@@ -111,10 +111,64 @@ void ImpFormula::PopulatePtrs() {
   }
 }
 
+class BailErrorListener : public antlr4::BaseErrorListener {
+public:
+    void syntaxError(antlr4::Recognizer* /* recognizer */,
+                     antlr4::Token* /* offendingSymbol */, size_t /* line */,
+                     size_t /* charPositionInLine */, const std::string& msg,
+                     std::exception_ptr /* e */
+    ) override {
+        throw std::runtime_error("Error when lexing: " + msg);
+    }
+};
+
+void ImpFormula::VisitCells(const Unode& root, std::vector<Position>& positions) {
+  if (!root)
+    return;
+  root->maybe_insert_pos(positions);
+  auto& children = root->get_children();
+  if (children.empty())
+    return;
+  for (const auto& ch: children)
+    VisitCells(ch, positions);
+}
+
+
 std::unique_ptr<ImpFormula> ParseImpFormula(std::string expression) {
-  return nullptr;
+  if (!(expression[0] == '=') || expression.size() < 2)
+    return nullptr;
+
+  auto ret = make_unique<ImpFormula>();
+
+  antlr4::ANTLRInputStream input(expression);
+  FormulaLexer lexer(&input);
+  BailErrorListener error_listener;
+  lexer.removeErrorListeners();
+  lexer.addErrorListener(&error_listener);
+
+  antlr4::CommonTokenStream tokens(&lexer);
+  FormulaParser parser(&tokens);
+  auto error_handler = std::make_shared<antlr4::BailErrorStrategy>();
+  parser.setErrorHandler(error_handler);
+  parser.removeErrorListeners();
+
+
+  antlr4::tree::ParseTree* tree = parser.main();
+  FormulaCustomListener listener;
+  antlr4::tree::ParseTreeWalker::DEFAULT.walk(&listener, tree);
+
+  ret->ast = std::move(listener.GetAstRoot());
+
+  std::vector<Position> positions;
+  ImpFormula::VisitCells(ret->ast, positions);
+  std::sort(positions.begin(), positions.end());
+  auto last = std::unique(positions.begin(), positions.end());
+  positions.erase(last, positions.end());
+  ret->ref_cells = std::move(positions);
+
+  return ret;
 }
 
 std::unique_ptr<IFormula> ParseFormula(string expression) {
-  return nullptr;
+  return ParseImpFormula(move(expression));
 }

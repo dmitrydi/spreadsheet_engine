@@ -36,9 +36,9 @@ void ImpSheet::SetCell(Position pos, string text) {
     else
       ptr->Clear();
     ptr->SetText(move(text));
-    PopulateFormulaPtrs(f); // fill formula->ast and formula->ref_ptrs with pointers to cells
+    PopulateFormulaPtrs(f, pos); // fill formula->ast and formula->ref_ptrs with pointers to cells, set dependent cells to other cells
     ptr->SetFormula(move(f));
-    PopulateCellPtrs(ptr); // fill dependency cells
+    //PopulateCellPtrs(ptr); // fill dependency cells
   }
 }
 
@@ -62,7 +62,7 @@ void ImpSheet::DeleteRows(int first, int count) {}
 void ImpSheet::DeleteCols(int first, int count) {}
 
 Size ImpSheet::GetPrintableSize() const {
-  return {RBC.row - LTC.row + 1, RBC.col - LTC.col + 1};
+  return {printable_RBC.row - printable_LTC.row + 1, printable_RBC.col - printable_LTC.col + 1};
 }
 
 void ImpSheet::PrintValues(std::ostream& output) const {
@@ -115,9 +115,9 @@ void ImpSheet::MaybeResizePrintableArea(Position deleted_pos) {
     }
     printable_LTC.col += new_min;
   } else if (deleted_pos.col == RBC.col) {
-    int new_max = 0;
+    int new_max = -1;
     for (const auto& row: cells) {
-      for (int i = row.size() - 1; i > 0; --i) {
+      for (int i = row.size() - 1; i >= 0; --i) {
         if (!row[i]->GetText().empty()) {
           if (i == RBC.col - LTC.col)
             return;
@@ -208,6 +208,41 @@ ImpCell* ImpSheet::CreateNewCell(Position pos, bool resize_printable_area) {
 
 }
 
+void ImpSheet::PopulateFormulaPtrs(unique_ptr<ImpFormula>& formula, Position formula_pos) {
+  if (!formula)
+    return;
+//  PopulateFormulaCells(formula.get()->ast);
+//  PopulateNode(formula.get()->ast);
+//  formula.get()->PopulatePtrs();
+  ImpFormula::UNode& ast = formula.get()->ast;
+  stack<AstNode*> st;
+  st.push(ast.get());
+  while(!st.empty()) {
+    AstNode* node = st.top();
+    st.pop();
+    auto pos = node->get_position();
+    if (pos) {
+      if (!GetCell(*pos))
+        CreateNewCell(*pos, false); // create empty cell
+      node->populate(*this);
+      AddDependentCell(*pos, formula_pos);
+      formula.get()->ref_ptrs.insert(GetImpCell(*pos));
+    }
+    for (auto& ch: node->get_children()) {
+      st.push(ch.get());
+    }
+  }
+}
+
+void ImpSheet::AddDependentCell(const Position& to_cell, const Position& pos) {
+  ImpCell* to_ptr = GetImpCell(to_cell);
+  ImpCell* ptr = GetImpCell(pos);
+  assert(to_ptr); // to del
+  assert(ptr); // to del
+  to_ptr->AddDepPtr(ptr);
+}
+
+// ????????
 void ImpSheet::PopulateFormulaCells(const ImpFormula::UNode& root) { // change to non-recursive
   optional<Position> mbpos = root.get()->get_position();
   if (mbpos)
@@ -223,19 +258,15 @@ void ImpSheet::PopulateNode(ImpFormula::UNode& root) { // change to non-recursiv
     PopulateNode(ch);
 }
 
-void ImpSheet::PopulateFormulaPtrs(unique_ptr<ImpFormula>& formula) {
-  if (!formula)
-    return;
-  PopulateFormulaCells(formula.get()->ast);
-  PopulateNode(formula.get()->ast);
-  formula.get()->PopulatePtrs();
-}
+
 
 void ImpSheet::PopulateCellPtrs(ImpCell* cell_ptr) {
   auto ref_positions = cell_ptr->GetReferencedCells();
   for (const auto& pos: ref_positions)
     GetImpCell(pos)->AddDepPtr(cell_ptr);
 }
+
+// ??????????
 
 bool ImpSheet::GraphIsCircular(const Graph& graph, const Position start_vertex) {
   unordered_map<Position, Color, PosHasher> color;

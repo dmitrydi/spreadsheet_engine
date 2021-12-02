@@ -14,6 +14,8 @@ class AstNode;
 static const std::unordered_set<char> UnaryOps = {'+', '-'};
 static const std::unordered_set<char> BinaryOps = {'+', '-', '*', '/'};
 
+
+
 class AstUnaryParseError {
 public:
   AstUnaryParseError() = default;
@@ -169,7 +171,7 @@ public:
   AstCell(std::string_view p): cell_ptr() {
     auto mp = Position::FromString(p);
     if (!mp.IsValid())
-      throw InvalidPositionException{mp.ToString()};
+      throw FormulaException{mp.ToString()};
     pos = mp;
   };
 
@@ -186,6 +188,9 @@ public:
   };
 
   Value evaluate(const ISheet& sh) override {
+    if (cell_ptr)
+      return cell_ptr->GetValue();
+    // for separate formulas
     auto ptr = sh.GetCell(pos);
     if (!ptr)
       return {0.};

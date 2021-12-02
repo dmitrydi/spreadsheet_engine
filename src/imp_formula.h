@@ -6,6 +6,10 @@
 #include <variant>
 #include <algorithm>
 #include <stack>
+#include "antlr4-runtime.h"
+#include "FormulaLexer.h"
+#include "FormulaCustomListener.h"
+#include "FormulaParser.h"
 
 class ImpCell;
 class ImpSheet;
@@ -22,10 +26,11 @@ public:
   HandlingResult HandleDeletedRows(int first, int count = 1) override;
   HandlingResult HandleDeletedCols(int first, int count = 1) override;
   void Invalidate() {valid = false;}
-
+  static void VisitCells(const Unode& root, std::vector<Position>& positions);
 private:
   friend class ImpCell;
   friend class ImpSheet;
+  friend std::unique_ptr<ImpFormula> ParseImpFormula(std::string expression);
   using UNode = std::unique_ptr<AstNode>;
   UNode ast = nullptr;
   // maybe move pointers from ast to a separate graph
@@ -37,6 +42,7 @@ private:
   void PopulatePtrs();
   mutable Value cached_val;
   mutable bool valid = false;
+
 
 };
 

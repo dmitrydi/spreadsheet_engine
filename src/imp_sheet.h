@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include "utility.h"
+#include <cassert>
 
 class SheetTester;
 
@@ -34,7 +35,7 @@ private:
   Position LTC = AbsMaxPos; // Left Top Corner
   Position RBC = AbsMinPos; // Right Bottom Corner
   Position printable_LTC = {0,0};
-  Position printable_RBC = {0,0};
+  Position printable_RBC = {-1,-1};
 
   Position GetInnerPosition(Position pos) const {
     if (!pos.IsValid())
@@ -66,9 +67,11 @@ private:
     black
   };
 
+  void PopulateFormulaPtrs(std::unique_ptr<ImpFormula>& formula, Position formula_position);
+
   void PopulateFormulaCells(const ImpFormula::UNode& root);
   void PopulateNode(ImpFormula::UNode& root);
-  void PopulateFormulaPtrs(std::unique_ptr<ImpFormula>& formula);
+
   void PopulateCellDependencies(Position pos);
   void PopulateCellPtrs(ImpCell* cell_ptr);
 
