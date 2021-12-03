@@ -37,31 +37,43 @@ private:
   Position printable_LTC = AbsMaxPos;
   Position printable_RBC = AbsMinPos;
 
+  std::pair<int, int> GetInsertPosition(Position pos);
+  void ExpandPrintableArea(Position pos);
+  std::optional<int> FirstNonzeroElement(int idx);
+  std::optional<int> LastNonzeroElement(int idx);
+  std::pair<int,int> FindTopOffset();
+  std::pair<int, int> FindBottomOffset();
+  void SqueezePrintableArea(Position deleted_position);
+  void DeleteCell(Position pos);
+  ImpCell* CreateEmptyCell(Position pos);
+  void CreateCell(Position pos, std::string text, std::unique_ptr<ImpFormula>&& formula);
+  void InvalidateDependencyGraph(Position pos);
+  void UpdateDependencyGraph(Position pos);
+
+  ImpCell* GetImpCell(Position pos);
+  const ImpCell* GetImpCell(Position pos) const;
+
   Position GetInnerPosition(Position pos) const {
     if (!pos.IsValid())
       throw InvalidPositionException{pos.ToString()};
     return {pos.row - LTC.row, pos.col - LTC.col};
   }
-  ImpCell* GetImpCell(Position pos);
-  const ImpCell* GetImpCell(Position pos) const;
 
-  void ResetCell(Position pos);
 
-  void MaybeResizePrintableArea(Position deleted_pos);
-  void MaybeExpandPrintableArea(Position pos) {
-    if (pos.row < printable_LTC.row)
-      printable_LTC.row = pos.row;
-    if (pos.col < printable_LTC.col)
-      printable_LTC.col = pos.col;
-    if (printable_RBC.row < pos.row)
-      printable_RBC.row = pos.row;
-    if (printable_RBC.col < pos.col)
-      printable_RBC.col = pos.col;
-  }
-  ImpCell* CreateNewCell(Position pos, bool resize_printable_area);
-
-  std::unique_ptr<ImpCell>& GetUptr(Position pos);
-  const std::unique_ptr<ImpCell>& GetConstUptr(Position pos) const;
+//  void ResetCell(Position pos);
+//
+//  void MaybeResizePrintableArea(Position deleted_pos);
+//  void MaybeExpandPrintableArea(Position pos) {
+//    if (pos.row < printable_LTC.row)
+//      printable_LTC.row = pos.row;
+//    if (pos.col < printable_LTC.col)
+//      printable_LTC.col = pos.col;
+//    if (printable_RBC.row < pos.row)
+//      printable_RBC.row = pos.row;
+//    if (printable_RBC.col < pos.col)
+//      printable_RBC.col = pos.col;
+//  }
+//  ImpCell* CreateNewCell(Position pos, bool resize_printable_area);
 
   using Graph = std::unordered_map<Position, std::unordered_set<Position, PosHasher>, PosHasher>;
 
@@ -76,16 +88,16 @@ private:
   };
 
   void PopulateFormulaPtrs(std::unique_ptr<ImpFormula>& formula, Position formula_position);
-
-  void PopulateFormulaCells(const ImpFormula::UNode& root);
-  void PopulateNode(ImpFormula::UNode& root);
-
-  void PopulateCellDependencies(Position pos);
-  void PopulateCellPtrs(ImpCell* cell_ptr);
-
-  void AddDependentCell(const Position& to_cell, const Position& pos);
-  void RemoveDependentCell(const Position& from_cell, const Position& pos);
-  void InvalidateCell(Position pos);
+//
+//  void PopulateFormulaCells(const ImpFormula::UNode& root);
+//  void PopulateNode(ImpFormula::UNode& root);
+//
+//  void PopulateCellDependencies(Position pos);
+//  void PopulateCellPtrs(ImpCell* cell_ptr);
+//
+//  void AddDependentCell(const Position& to_cell, const Position& pos);
+//  void RemoveDependentCell(const Position& from_cell, const Position& pos);
+//  void InvalidateCell(Position pos);
 };
 
 std::unique_ptr<ImpSheet> CreateImpSheet();
