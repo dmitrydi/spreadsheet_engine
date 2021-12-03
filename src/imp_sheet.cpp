@@ -3,7 +3,7 @@
 using namespace std;
 
 unique_ptr<ImpSheet> CreateImpSheet() {
-  return nullptr;
+  return make_unique<ImpSheet>();
 }
 
 unique_ptr<ISheet> CreateSheet() {
@@ -16,13 +16,15 @@ void ImpSheet::SetCell(Position pos, string text) {
   if (GetCell(pos) && GetCell(pos)->GetText() == text)
     return;
 
+  ResetCell(pos);
+
   if (text.empty()) {
     if (GetCell(pos)) {
-      ClearCell(pos); // this invalidates dependent cells
-
-      if (dependency_graph.count(pos)) // remove dependencies from the graph as empty cell do not depend on any cells
-        dependency_graph.erase(pos);
-      MaybeResizePrintableArea(pos);
+//      ClearCell(pos); // this invalidates dependent cells
+//
+//      if (dependency_graph.count(pos)) // remove dependencies from the graph as empty cell do not depend on any cells
+//        dependency_graph.erase(pos);
+//      MaybeResizePrintableArea(pos);
     } else {
       CreateNewCell(pos, false); // no need to add dependencies and no resize of printable area
     }
@@ -33,11 +35,12 @@ void ImpSheet::SetCell(Position pos, string text) {
     ImpCell* ptr = GetImpCell(pos);
     if (!ptr)
       ptr = CreateNewCell(pos, true);
-    else
-      ptr->Clear();
+//    else
+//      ptr->Clear();
     ptr->SetText(move(text));
     PopulateFormulaPtrs(f, pos); // fill formula->ast and formula->ref_ptrs with pointers to cells, set dependent cells to other cells
     ptr->SetFormula(move(f));
+    MaybeExpandPrintableArea(pos);
     //PopulateCellPtrs(ptr); // fill dependency cells
   }
 }
@@ -50,10 +53,11 @@ ICell* ImpSheet::GetCell(Position pos) {
 }
 
 void ImpSheet::ClearCell(Position pos) {
-  ImpCell* ptr = GetImpCell(pos);
-  if (!ptr)
-    return;
-  ptr->Clear();
+  ResetCell(pos);
+  auto in_pos = GetInnerPosition(pos);
+  if (in_pos.IsValid())
+    cells[in_pos.row][in_pos.col].reset(nullptr);
+  // resize LTC, RBC
 }
 
 void ImpSheet::InsertRows(int before, int count) {}
@@ -62,7 +66,10 @@ void ImpSheet::DeleteRows(int first, int count) {}
 void ImpSheet::DeleteCols(int first, int count) {}
 
 Size ImpSheet::GetPrintableSize() const {
-  return {printable_RBC.row - printable_LTC.row + 1, printable_RBC.col - printable_LTC.col + 1};
+  Size sz = {printable_RBC.row - printable_LTC.row + 1, printable_RBC.col - printable_LTC.col + 1};
+  if (sz.rows < 0 || sz.cols < 0)
+    return {0,0};
+  return sz;
 }
 
 void ImpSheet::PrintValues(std::ostream& output) const {
@@ -74,12 +81,21 @@ void ImpSheet::PrintTexts(std::ostream& output) const {
 }
 
 // ----------PRIVATE--------------
+void ImpSheet::ResetCell(Position pos) {
+  ImpCell* ptr = GetImpCell(pos);
+  if (!ptr)
+    return;
+  ptr->Clear();
+  MaybeResizePrintableArea(pos);
+  // invalidate dependencies
+}
+
 void ImpSheet::MaybeResizePrintableArea(Position deleted_pos) {
-  if (deleted_pos.row == LTC.row) {
+  if (deleted_pos.row == printable_LTC.row) {
     bool found = false;
-    for (size_t i = 0;  i != cells.size(); ++i) {
+    for (size_t i = printable_LTC.row - LTC.row;  i != cells.size(); ++i) {
       for (const auto& cptr: cells[i]) {
-        if (!cptr->GetText().empty()) {
+        if (cptr && !cptr->GetText().empty()) {
           found = true;
           break;
         }
@@ -87,11 +103,15 @@ void ImpSheet::MaybeResizePrintableArea(Position deleted_pos) {
       if (found) break;
       ++printable_LTC.row;
     }
-  } else if (deleted_pos.row == RBC.row) {
+    if (!found && printable_LTC.row > RBC.row) {
+      printable_LTC = AbsMaxPos; // table became empty
+      //return;
+    }
+  } else if (deleted_pos.row == printable_RBC.row) {
     bool found = false;
-    for (int i = cells.size()-1; i >=0 ; --i) {
+    for (int i = printable_RBC.row - LTC.row; i >=0 ; --i) {
       for (const auto& cptr: cells[i]) {
-        if (!cptr->GetText().empty()) {
+        if (cptr && !cptr->GetText().empty()) {
           found = true;
           break;
         }
@@ -99,12 +119,16 @@ void ImpSheet::MaybeResizePrintableArea(Position deleted_pos) {
       if (found) break;
       --printable_RBC.row;
     }
+    if (printable_RBC.row < LTC.row) {
+      printable_RBC = AbsMinPos; // table became empty
+      //return;
+    }
   }
-  if (deleted_pos.col == LTC.col) {
+  if (deleted_pos.col == printable_LTC.col) {
     size_t new_min = Position::kMaxCols;
     for (const auto& row : cells) {
       for (size_t i = 0; i != row.size(); ++i)
-        if (!row[i]->GetText().empty()) {
+        if (row[i] && !row[i]->GetText().empty()) {
           if (i == 0)
             return; // no need to change
           if(i < new_min) {
@@ -113,12 +137,15 @@ void ImpSheet::MaybeResizePrintableArea(Position deleted_pos) {
           }
         }
     }
-    printable_LTC.col += new_min;
-  } else if (deleted_pos.col == RBC.col) {
+    if (new_min == Position::kMaxCols)
+      printable_LTC = AbsMaxPos;
+    else
+      printable_LTC.col += (new_min - printable_LTC.col + LTC.col);
+  } else if (deleted_pos.col == printable_RBC.col) {
     int new_max = -1;
     for (const auto& row: cells) {
       for (int i = row.size() - 1; i >= 0; --i) {
-        if (!row[i]->GetText().empty()) {
+        if (row[i] && !row[i]->GetText().empty()) {
           if (i == RBC.col - LTC.col)
             return;
           if (i > new_max) {
@@ -128,12 +155,21 @@ void ImpSheet::MaybeResizePrintableArea(Position deleted_pos) {
         }
       }
     }
-    printable_RBC.col = printable_LTC.col + new_max;
+    if (new_max == -1)
+      printable_RBC = AbsMinPos;
+    else
+      printable_RBC.col = LTC.col + new_max;
   }
 }
 
 ImpCell* ImpSheet::GetImpCell(Position pos) {
+  if (cells.empty())
+    return nullptr;
   auto in_pos = GetInnerPosition(pos);
+  if (!in_pos.IsValid())
+    return nullptr;
+  if (in_pos.row >= (int)cells.size())
+    return nullptr;
   auto& row = cells[in_pos.row];
   if (static_cast<size_t>(in_pos.col) >= row.size())
     return nullptr;
@@ -141,7 +177,13 @@ ImpCell* ImpSheet::GetImpCell(Position pos) {
 }
 
 const ImpCell* ImpSheet::GetImpCell(Position pos) const {
+  if (cells.empty())
+    return nullptr;
   auto in_pos = GetInnerPosition(pos);
+  if (!in_pos.IsValid())
+    return nullptr;
+  if (in_pos.row >= (int)cells.size())
+    return nullptr;
   auto& row = cells[in_pos.row];
   if (static_cast<size_t>(in_pos.col) >= row.size())
     return nullptr;
@@ -162,7 +204,7 @@ ImpCell* ImpSheet::CreateNewCell(Position pos, bool resize_printable_area) {
     cells[0][0] = make_unique<ImpCell>();
     LTC = RBC = pos;
     if (resize_printable_area)
-      SetPrintableAreaToInner();
+      MaybeExpandPrintableArea(pos);
     return cells[0][0].get();
   }
   if (pos.row > RBC.row) {
@@ -202,8 +244,9 @@ ImpCell* ImpSheet::CreateNewCell(Position pos, bool resize_printable_area) {
   if (cells[in_row].size() <= in_col) // resize only current row
     cells[in_row].resize(in_col + 1);
   cells[in_row][in_col] = make_unique<ImpCell>();
-  if (resize_printable_area)
-    SetPrintableAreaToInner();
+  if (resize_printable_area) {
+    MaybeExpandPrintableArea(pos);
+  }
   return cells[in_row][in_col].get();
 
 }

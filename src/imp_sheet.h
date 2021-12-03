@@ -34,8 +34,8 @@ private:
 
   Position LTC = AbsMaxPos; // Left Top Corner
   Position RBC = AbsMinPos; // Right Bottom Corner
-  Position printable_LTC = {0,0};
-  Position printable_RBC = {-1,-1};
+  Position printable_LTC = AbsMaxPos;
+  Position printable_RBC = AbsMinPos;
 
   Position GetInnerPosition(Position pos) const {
     if (!pos.IsValid())
@@ -45,10 +45,18 @@ private:
   ImpCell* GetImpCell(Position pos);
   const ImpCell* GetImpCell(Position pos) const;
 
+  void ResetCell(Position pos);
+
   void MaybeResizePrintableArea(Position deleted_pos);
-  void SetPrintableAreaToInner() {
-    printable_LTC = LTC;
-    printable_RBC = RBC;
+  void MaybeExpandPrintableArea(Position pos) {
+    if (pos.row < printable_LTC.row)
+      printable_LTC.row = pos.row;
+    if (pos.col < printable_LTC.col)
+      printable_LTC.col = pos.col;
+    if (printable_RBC.row < pos.row)
+      printable_RBC.row = pos.row;
+    if (printable_RBC.col < pos.col)
+      printable_RBC.col = pos.col;
   }
   ImpCell* CreateNewCell(Position pos, bool resize_printable_area);
 

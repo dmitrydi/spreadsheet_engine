@@ -32,10 +32,18 @@ private:
   const ISheet *parent = nullptr;
   std::unique_ptr<ImpFormula> formula = nullptr;
   std::string raw_text;
-  std::string rendered_text;
+  mutable std::string rendered_text;
   std::unordered_set<ImpCell*> dep_ptrs; // dependent cells
 
   friend class ImpSheet;
+
+  std::string RenderText() const {
+    if (!raw_text.empty()) {
+      if (raw_text[0] == kEscapeSign)
+        return {next(raw_text.begin()), raw_text.end()};
+    }
+    return raw_text;
+  }
 
   void AddDepPtr(ImpCell* ptr) {
     dep_ptrs.insert(ptr);

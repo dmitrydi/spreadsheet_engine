@@ -14,6 +14,9 @@ ICell::Value ImpCell::GetValue() const {
     else
       return 0.;
   }
+  if (state == CellState::Invalid) {
+    rendered_text = RenderText();
+  }
   return rendered_text;
 }
 
@@ -30,13 +33,7 @@ std::vector<Position> ImpCell::GetReferencedCells() const {
 }
 
 void ImpCell::Clear() {
- for (auto ptr: dep_ptrs)
-   ptr->Invalidate();
-
- if (formula)
-   for (auto ptr: formula->GetRefPtrs())
-     ptr->RemoveDepPtr(this);
-
+  // dependencies are invalidated in sheet
  Invalidate();
  formula.reset(nullptr);
  raw_text.clear();

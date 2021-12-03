@@ -13,3 +13,5 @@ struct PosHasher {
     return lhs;
   }
 };
+
+Position operator"" _ppos(const char* str, std::size_t);
