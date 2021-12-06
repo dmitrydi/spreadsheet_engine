@@ -5,16 +5,12 @@ using namespace std;
 using Value = ImpFormula::Value;
 
 Value ImpFormula::Evaluate(const ISheet& sheet) const {
-//  if (valid)
-//    return cached_val;
-//  //cached_val = ast.get()->evaluate(sheet);
   visit(overload {
     [this](double val) { this->cached_val = val;},
     [this](const string& val) { this->cached_val = FormulaError(FormulaError::Category::Value); },
     [this](const FormulaError& err) { this->cached_val = err;}
   }, ast.get()->evaluate(sheet)
       );
-  //valid = true;
   return cached_val;
 }
 
@@ -135,8 +131,8 @@ void ImpFormula::VisitCells(const Unode& root, std::vector<Position>& positions)
 
 
 std::unique_ptr<ImpFormula> ParseImpFormula(std::string expression) {
-  if (!(expression[0] == '=') || expression.size() < 2)
-    return nullptr;
+//  if (!(expression[0] == '=') || expression.size() < 2)
+//    return nullptr;
 
   auto ret = make_unique<ImpFormula>();
 

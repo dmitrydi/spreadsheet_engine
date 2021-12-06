@@ -2,6 +2,7 @@
 
 #include "common.h"
 #include "imp_formula.h"
+#include <optional>
 
 class ImpSheet;
 
@@ -34,6 +35,8 @@ private:
   std::string raw_text;
   mutable std::string rendered_text;
   std::unordered_set<ImpCell*> dep_ptrs; // dependent cells
+
+  static std::optional<double> MaybeGetDouble(const std::string& str);
 
   friend class ImpSheet;
 

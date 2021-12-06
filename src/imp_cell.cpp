@@ -12,12 +12,29 @@ ICell::Value ImpCell::GetValue() const {
       return cached_value;
     }
     else
-      return 0.;
+      return 0.; // throw here is better
   }
   if (state == CellState::Invalid) {
     rendered_text = RenderText();
+    auto double_val = MaybeGetDouble(raw_text);
+    if (double_val)
+      cached_value = *double_val;
+    else
+      cached_value = rendered_text;
+    state = CellState::Valid;
   }
-  return rendered_text;
+  return cached_value;
+}
+
+optional<double> ImpCell::MaybeGetDouble(const string& str) {
+  if (str.empty())
+    return 0.; // due to convention
+  double result;
+  std::istringstream i(str);
+  i >> result;
+  if (!i.fail() && i.eof())
+    return result;
+  return nullopt;
 }
 
 string ImpCell::GetText() const {

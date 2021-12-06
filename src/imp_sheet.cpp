@@ -14,7 +14,7 @@ void ImpSheet::SetCell(Position pos, string text) {
   if (!pos.IsValid())
     throw InvalidPositionException{pos.ToString()};
   if ((text.size() > 1) && (text[0] == kFormulaSign)) {
-    auto f = ParseImpFormula(text);
+    auto f = ParseImpFormula({next(text.begin()), text.end()});
     if (f && FormulaHasCircularRefs(pos, f))
       throw CircularDependencyException{text};
     else {

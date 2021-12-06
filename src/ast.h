@@ -194,7 +194,9 @@ public:
     auto ptr = sh.GetCell(pos);
     if (!ptr)
       return {0.};
-    return ptr->GetValue();
+    else {
+      return ptr->GetValue();
+    }
   }
   Position get_pos() const {
     return pos;

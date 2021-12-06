@@ -571,10 +571,10 @@ namespace {
 int main() {
   SheetTester sht;
   sht.TestAll();
-  return 0;
-//  sht.TestCreateNewCell();
 //  return 0;
-//  throw std::runtime_error{"custom tests OK"};
+////  sht.TestCreateNewCell();
+////  return 0;
+////  throw std::runtime_error{"custom tests OK"};
   TestRunner tr;
   RUN_TEST(tr, TestPositionAndStringConversion);
   RUN_TEST(tr, TestPositionToStringInvalid);
