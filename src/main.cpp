@@ -570,7 +570,9 @@ namespace {
 
 int main() {
   SheetTester sht;
-  sht.TestCreateNewCell();
+  sht.TestAll();
+  return 0;
+//  sht.TestCreateNewCell();
 //  return 0;
 //  throw std::runtime_error{"custom tests OK"};
   TestRunner tr;
@@ -581,7 +583,7 @@ int main() {
   RUN_TEST(tr, TestInvalidPosition);
   RUN_TEST(tr, TestSetCellPlainText);
   RUN_TEST(tr, TestClearCell);
-  return 0;
+
   RUN_TEST(tr, TestFormulaArithmetic);
   RUN_TEST(tr, TestFormulaReferences);
   RUN_TEST(tr, TestFormulaExpressionFormatting);

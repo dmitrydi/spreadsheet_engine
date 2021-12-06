@@ -13,7 +13,7 @@ unique_ptr<ISheet> CreateSheet() {
 void ImpSheet::SetCell(Position pos, string text) {
   if (!pos.IsValid())
     throw InvalidPositionException{pos.ToString()};
-  if ((text.size() > 1) && (text[0] == '=')) {
+  if ((text.size() > 1) && (text[0] == kFormulaSign)) {
     auto f = ParseImpFormula(text);
     if (f && FormulaHasCircularRefs(pos, f))
       throw CircularDependencyException{text};
@@ -166,6 +166,9 @@ pair<int, int> ImpSheet::GetInsertPosition(Position pos) {
 ImpCell* ImpSheet::CreateEmptyCell(Position pos) {
     auto [ins_row, ins_col] = GetInsertPosition(pos);
 
+    if (cells.empty())
+      LTC = pos;
+
     if (ins_row < 0) { // insert before existing rows
         vector<Row> new_rows(abs(ins_row));
         cells.insert(cells.begin(), make_move_iterator(new_rows.begin()), make_move_iterator(new_rows.end()));
@@ -181,19 +184,22 @@ ImpCell* ImpSheet::CreateEmptyCell(Position pos) {
     auto& row = cells[ins_row];
 
     if (ins_col < 0) {
-        // resize and move contents of all rows
-        for (auto& row: cells) {
+        // resize and move contents of all non-empty rows
+        for (auto& row_: cells) {
+          if(!row_.empty()) {
             vector<unique_ptr<ImpCell>> new_cols(abs(ins_col));
-            row.insert(row.begin(), make_move_iterator(new_cols.begin()), make_move_iterator(new_cols.end()));
+            row_.insert(row_.begin(), make_move_iterator(new_cols.begin()), make_move_iterator(new_cols.end()));
+          }
         }
         LTC.col += ins_col;
         ins_col = 0; // in this case alway insert to zero new row
-    } else {
-        if (ins_col >= (int)row.size()) { // resize only current row
-            row.resize(ins_col + 1);
-            RBC.col = LTC.col + row.size() - 1;
-        }
     }
+
+    if (ins_col >= (int)row.size()) { // resize only current row
+        row.resize(ins_col + 1);
+        RBC.col = max(RBC.col, LTC.col + (int)row.size() - 1);
+    }
+
 
     cells[ins_row][ins_col] = make_unique<ImpCell>();
     return cells[ins_row][ins_col].get();
@@ -270,13 +276,13 @@ void ImpSheet::SqueezePrintableArea(Position deleted_position) {
     }
     if (deleted_position.row == printable_LTC.row || deleted_position.col == printable_LTC.col) {
         auto [row_offset, col_offset] = FindTopOffset();
-        printable_LTC.row += row_offset;
-        printable_LTC.col += col_offset;
+        printable_LTC.row = LTC.row + row_offset;
+        printable_LTC.col = LTC.col + col_offset;
     }
     if (deleted_position.row == printable_RBC.row || deleted_position.col == printable_RBC.col) {
         auto [row_offset, col_offset] = FindBottomOffset();
-        printable_RBC.row -= row_offset;
-        printable_RBC.col -= col_offset;
+        printable_RBC.row = RBC.row - row_offset;
+        printable_RBC.col = RBC.col - col_offset;
     }
     if ((printable_LTC.row > printable_RBC.row) || (printable_LTC.col > printable_RBC.col)) {
         printable_LTC = AbsMaxPos;

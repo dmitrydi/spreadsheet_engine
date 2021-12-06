@@ -63,6 +63,12 @@ std::ostream& operator<<(std::ostream& os, const std::unordered_map<K, V>& m) {
   return TestRunnerPrivate::PrintMap(os, m);
 }
 
+template <typename T1, typename T2>
+std::ostream& operator << (std::ostream& os, const std::pair<T1, T2>& p) {
+  os << "(" << p.first << ", " << p.second << ")";
+  return os;
+}
+
 template <class T, class U>
 void AssertEqual(const T& t, const U& u, const std::string& hint = {}) {
   if (!(t == u)) {
