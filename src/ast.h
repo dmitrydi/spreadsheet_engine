@@ -10,6 +10,7 @@
 #include <optional>
 
 class AstNode;
+class SheetTester;
 
 static const std::unordered_set<char> UnaryOps = {'+', '-'};
 static const std::unordered_set<char> BinaryOps = {'+', '-', '*', '/'};
@@ -48,6 +49,7 @@ public:
   }
   virtual void maybe_insert_pos(std::vector<Position>& positions) const {};
   virtual ~AstNode() = default;
+  friend class SheetTester;
 protected:
   std::vector<Unode> children;
 };
@@ -108,30 +110,32 @@ private:
 };
 
 struct BinaryOP {
-  virtual double operator()(double lhs, double rhs) const = 0;
+  virtual ICell::Value operator()(double lhs, double rhs) const = 0;
   virtual ~BinaryOP() = default;
 };
 
 struct AddOp: BinaryOP {
-  double operator()(double lhs, double rhs) const override {
+  ICell::Value operator()(double lhs, double rhs) const override {
     return lhs + rhs;
   }
 };
 
 struct SubOp: BinaryOP {
-  double operator()(double lhs, double rhs) const override {
+  ICell::Value operator()(double lhs, double rhs) const override {
     return lhs - rhs;
   }
 };
 
 struct MulOp: BinaryOP {
-  double operator()(double lhs, double rhs) const override {
+  ICell::Value operator()(double lhs, double rhs) const override {
     return lhs * rhs;
   }
 };
 
 struct DivOp: BinaryOP {
-  double operator()(double lhs, double rhs) const override {
+  ICell::Value operator()(double lhs, double rhs) const override {
+    if (abs(rhs) < std::numeric_limits<double>::min())
+      return FormulaError(FormulaError::Category::Div0);
     return lhs / rhs;
   }
 };
@@ -170,8 +174,9 @@ class AstCell: public AstNode {
 public:
   AstCell(std::string_view p): cell_ptr() {
     auto mp = Position::FromString(p);
-    if (!mp.IsValid())
+    if (!mp.IsValid()) {
       throw FormulaException{mp.ToString()};
+    }
     pos = mp;
   };
 

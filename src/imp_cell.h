@@ -5,6 +5,7 @@
 #include <optional>
 
 class ImpSheet;
+class SheetTester;
 
 enum class CellState {
   Valid,
@@ -13,7 +14,6 @@ enum class CellState {
 
 class ImpCell: public ICell {
 public:
-  ImpCell() = default;
   ImpCell(const ISheet *parent): parent(parent) {};
   Value GetValue() const override;
   std::string GetText() const override;
@@ -35,10 +35,14 @@ private:
   std::string raw_text;
   mutable std::string rendered_text;
   std::unordered_set<ImpCell*> dep_ptrs; // dependent cells
+  bool IsValid() const {
+    return state == CellState::Valid;
+  }
 
   static std::optional<double> MaybeGetDouble(const std::string& str);
 
   friend class ImpSheet;
+  friend class SheetTester;
 
   std::string RenderText() const {
     if (!raw_text.empty()) {

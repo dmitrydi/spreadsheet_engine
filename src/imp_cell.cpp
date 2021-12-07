@@ -4,15 +4,12 @@ using namespace std;
 
 ICell::Value ImpCell::GetValue() const {
   if (formula) {
-    if (parent) {
-      if (state == CellState::Invalid) {
-        visit([this](auto&& arg){ this->cached_value = arg; }, formula->Evaluate(*parent));
-        state = CellState::Valid;
-      }
-      return cached_value;
+    if (state == CellState::Invalid) {
+      visit([this](auto&& arg){ this->cached_value = arg; }, formula->Evaluate(*parent));
+      state = CellState::Valid;
     }
-    else
-      return 0.; // throw here is better
+    return cached_value;
+
   }
   if (state == CellState::Invalid) {
     rendered_text = RenderText();

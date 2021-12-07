@@ -3,10 +3,17 @@
 using namespace std;
 
 void SheetTester::TestAll() {
+  TestPositionFromString();
   TestGetInsertPosition();
   TestCreateEmptyCell();
   TestSqueezePrintableArea();
   TestCreateNewCell();
+  TestFormulaHasCircularRefs();
+  TestDepGraphChange();
+  TestRefGraphChange();
+  TestInvalidationAtChange();
+  TestNoInvalidation();
+
 //  TestExpandPrintableArea();
 //  TestFirstNonzeroElement();
 //  TestLastNonzeroElement();
@@ -19,6 +26,34 @@ void SheetTester::TestAll() {
 //  TestCreateCell();
 //  TestInvalidateDependencyGraph();
 //  TestUpdateDependencyGraph();
+ // throw;
+}
+
+void SheetTester::TestPositionFromString() {
+  auto TestPositionFromString_1 = []() {
+    ASSERT(!Position::FromString("X0").IsValid());
+    ASSERT(!Position::FromString("ABCD1").IsValid());
+    ASSERT(!Position::FromString("A123456").IsValid());
+    ASSERT(!Position::FromString("ABCDEFGHIJKLMNOPQRS1234567890").IsValid());
+    ASSERT(!Position::FromString("XFD16385").IsValid());
+    ASSERT(!Position::FromString("XFE16384").IsValid());
+    ASSERT(!Position::FromString("R2D2").IsValid());
+  };
+
+  TestRunner tr;
+
+  RUN_TEST(tr, TestPositionFromString_1);
+  //throw;
+  /*
+   *     try_formula("=X0");
+    try_formula("=ABCD1");
+    try_formula("=A123456");
+    try_formula("=ABCDEFGHIJKLMNOPQRS1234567890");
+    try_formula("=XFD16385");
+    try_formula("=XFE16384");
+    try_formula("=R2D2");
+   */
+
 }
 
 void SheetTester::TestGetInsertPosition() {
@@ -394,4 +429,234 @@ void SheetTester::TestCreateNewCell() {
   RUN_TEST(tr, TestDeleteLTCCol);
   RUN_TEST(tr, TestDeleteRBCCol);
 
+}
+
+void SheetTester::PrintGraph(const ImpSheet::Graph& gr) {
+  for (const auto& [curr_v, children]: gr) {
+    cerr << curr_v.ToString() << ": ";
+    for (const auto& ch: children)
+      cerr << ch.ToString() << " ";
+    cerr << endl;
+  }
+}
+
+void SheetTester::TestFormulaHasCircularRefs() {
+  auto TestFormulaHasCircularRefs_1 = []() {
+    auto sheet = CreateImpSheet();
+
+    sheet->SetCell("D7"_ppos, "=F15");
+    sheet->SetCell("F15"_ppos, "=I11");
+    sheet->SetCell("H7"_ppos, "=F10+D7+F5");
+    sheet->SetCell("F5"_ppos, "1");
+    sheet->SetCell("F10"_ppos, "1");
+    try {
+      sheet->SetCell("I11"_ppos, "1");
+    } catch (CircularDependencyException& ex) {
+      cerr << ex.what() << endl;
+      sheet->SetCell("I11"_ppos, "1");
+    }
+    ASSERT_EQUAL(get<double>(sheet->GetCell("F5"_ppos)->GetValue()), 1.0);
+    ASSERT_EQUAL(get<double>(sheet->GetCell("F10"_ppos)->GetValue()), 1.0);
+    ASSERT_EQUAL(get<double>(sheet->GetCell("I11"_ppos)->GetValue()), 1.0);
+    ASSERT_EQUAL(get<double>(sheet->GetCell("D7"_ppos)->GetValue()), 1.0);
+    ASSERT_EQUAL(get<double>(sheet->GetCell("F15"_ppos)->GetValue()), 1.0);
+    ASSERT_EQUAL(get<double>(sheet->GetCell("H7"_ppos)->GetValue()), 3.0);
+  };
+
+  auto TestFormulaHasCircularRefs_FromMain = []() {
+    auto sheet = CreateImpSheet();
+    sheet->SetCell("E2"_ppos, "=E4");
+    sheet->SetCell("E4"_ppos, "=X9");
+    sheet->SetCell("X9"_ppos, "=M6");
+    sheet->SetCell("M6"_ppos, "Ready");
+    bool caught = false;
+    try {
+      sheet->SetCell("M6"_ppos, "=E2");
+    } catch(CircularDependencyException& ex) {
+      caught = true;
+    }
+    ASSERT(caught);
+    ASSERT_EQUAL(sheet->GetCell("M6"_ppos)->GetText(), "Ready");
+    auto val = sheet->GetCell("E2"_ppos)->GetValue();
+    ASSERT(holds_alternative<FormulaError>(val));
+  };
+
+  TestRunner tr;
+
+  RUN_TEST(tr, TestFormulaHasCircularRefs_1);
+  RUN_TEST(tr, TestFormulaHasCircularRefs_FromMain);
+}
+
+bool SheetTester::GraphsEqual(const ImpSheet::Graph& lhs, const ImpSheet::Graph& rhs) {
+  if (lhs.size() != rhs.size())
+    return false;
+  for (const auto& [p, sp]: lhs) {
+    if (!rhs.count(p))
+      return false;
+    if (lhs.at(p).size() != rhs.at(p).size())
+      return false;
+    for (const auto& pp: sp)
+      if (!rhs.at(p).count(pp))
+        return false;
+  }
+  return true;
+}
+
+void SheetTester::TestDepGraphChange() {
+  TestRunner tr;
+  auto TestDepGraphChange_SingleCell = []() {
+    auto sheet = CreateImpSheet();
+    sheet->SetCell("J4"_ppos, "1");
+    ASSERT(sheet->dependency_graph.empty());
+    sheet->SetCell("I4"_ppos, "=J4");
+    ImpSheet::Graph exp_dep_gr;
+    exp_dep_gr["J4"_ppos].insert("I4"_ppos);
+    ASSERT(GraphsEqual(sheet->dependency_graph, exp_dep_gr));
+  };
+
+  auto TestDepGraphChange_GraphToEmpty = []() {
+    auto sheet = CreateImpSheet();
+    sheet->SetCell("J4"_ppos, "1");
+    sheet->SetCell("I4"_ppos, "=J4");
+    ImpSheet::Graph exp_dep_gr;
+    exp_dep_gr["J4"_ppos].insert("I4"_ppos);
+    ASSERT(GraphsEqual(sheet->dependency_graph, exp_dep_gr));
+    sheet->SetCell("I4"_ppos, "2");
+    ASSERT(sheet->dependency_graph.at("J4"_ppos).empty());
+  };
+
+  auto TestDepGraphChange_ChangeDependency = []() {
+    auto sheet = CreateImpSheet();
+    sheet->SetCell("J4"_ppos, "1");
+    sheet->SetCell("I4"_ppos, "=J4");
+    ImpSheet::Graph exp_dep_gr;
+    exp_dep_gr["J4"_ppos].insert("I4"_ppos);
+    ASSERT(GraphsEqual(sheet->dependency_graph, exp_dep_gr));
+    sheet->SetCell("I4"_ppos, "=J5");
+    exp_dep_gr["J4"_ppos].erase("I4"_ppos);
+    exp_dep_gr["J5"_ppos].insert("I4"_ppos);
+    ASSERT(GraphsEqual(sheet->dependency_graph, exp_dep_gr));
+  };
+
+
+  auto TestDepGraphChange_StillDependent = []() {
+    auto sheet = CreateImpSheet();
+    sheet->SetCell("I2"_ppos, "=J3");
+    sheet->SetCell("I3"_ppos, "=J3");
+    sheet->SetCell("I4"_ppos, "=J3");
+    ImpSheet::Graph exp_dep_gr;
+    exp_dep_gr["J3"_ppos].insert("I2"_ppos);
+    exp_dep_gr["J3"_ppos].insert("I3"_ppos);
+    exp_dep_gr["J3"_ppos].insert("I4"_ppos);
+    ASSERT(GraphsEqual(sheet->dependency_graph, exp_dep_gr));
+    sheet->SetCell("J3"_ppos, "2");
+    ASSERT(GraphsEqual(sheet->dependency_graph, exp_dep_gr));
+  };
+
+  RUN_TEST(tr, TestDepGraphChange_SingleCell);
+  RUN_TEST(tr, TestDepGraphChange_GraphToEmpty);
+  RUN_TEST(tr, TestDepGraphChange_ChangeDependency);
+  RUN_TEST(tr, TestDepGraphChange_StillDependent);
+}
+void SheetTester::TestRefGraphChange() {
+  auto TestRefGraphChange_SingleCell = []() {
+    auto sheet = CreateImpSheet();
+    sheet->SetCell("A1"_ppos, "=B2");
+    ImpSheet::Graph exp_ref_gr;
+    exp_ref_gr["A1"_ppos].insert("B2"_ppos);
+    ASSERT(GraphsEqual(sheet->reference_graph, exp_ref_gr));
+  };
+
+  auto TestRefGraphChange_RemovedDependency = []() {
+    auto sheet = CreateImpSheet();
+    sheet->SetCell("A1"_ppos, "=B2");
+    ImpSheet::Graph exp_ref_gr;
+    exp_ref_gr["A1"_ppos].insert("B2"_ppos);
+    ASSERT(GraphsEqual(sheet->reference_graph, exp_ref_gr));
+    sheet->SetCell("A1"_ppos, "text");
+    exp_ref_gr.erase("A1"_ppos);
+    ASSERT(GraphsEqual(sheet->reference_graph, exp_ref_gr));
+  };
+
+  TestRunner tr;
+
+  RUN_TEST(tr, TestRefGraphChange_SingleCell);
+  RUN_TEST(tr, TestRefGraphChange_RemovedDependency);
+}
+void SheetTester::TestInvalidationAtChange() {
+  auto TestInvalidationAtChange_1 = []() {
+    auto sheet = CreateImpSheet();
+    sheet->SetCell("F5"_ppos, "=G4+G6");
+    sheet->SetCell("G4"_ppos, "=H3+H5");
+    sheet->SetCell("G6"_ppos, "=H5+H7");
+    sheet->SetCell("H3"_ppos, "1");
+    sheet->SetCell("H5"_ppos, "1");
+    sheet->SetCell("H7"_ppos, "1");
+    ASSERT(!sheet->GetImpCell("F5"_ppos)->IsValid());
+    ASSERT(!sheet->GetImpCell("G4"_ppos)->IsValid());
+    ASSERT(!sheet->GetImpCell("G6"_ppos)->IsValid());
+    auto val = sheet->GetCell("F5"_ppos)->GetValue();
+    ASSERT_EQUAL(get<double>(val), 4.0);
+    ASSERT(sheet->GetImpCell("F5"_ppos)->IsValid());
+    ASSERT(sheet->GetImpCell("G4"_ppos)->IsValid());
+    ASSERT(sheet->GetImpCell("G6"_ppos)->IsValid());
+    sheet->SetCell("H3"_ppos, "0");
+    ASSERT(!sheet->GetImpCell("F5"_ppos)->IsValid());
+    ASSERT(!sheet->GetImpCell("G4"_ppos)->IsValid());
+    ASSERT(sheet->GetImpCell("G6"_ppos)->IsValid());
+    val = sheet->GetCell("F5"_ppos)->GetValue();
+    ASSERT_EQUAL(get<double>(val), 3.0);
+    ASSERT(sheet->GetImpCell("F5"_ppos)->IsValid());
+    ASSERT(sheet->GetImpCell("G4"_ppos)->IsValid());
+    ASSERT(sheet->GetImpCell("G6"_ppos)->IsValid());
+    sheet->SetCell("H7"_ppos, "");
+    ASSERT(!sheet->GetImpCell("F5"_ppos)->IsValid());
+    ASSERT(sheet->GetImpCell("G4"_ppos)->IsValid());
+    ASSERT(!sheet->GetImpCell("G6"_ppos)->IsValid());
+    val = sheet->GetCell("F5"_ppos)->GetValue();
+    ASSERT_EQUAL(get<double>(val), 2.0);
+    ASSERT(sheet->GetImpCell("F5"_ppos)->IsValid());
+    ASSERT(sheet->GetImpCell("G4"_ppos)->IsValid());
+    ASSERT(sheet->GetImpCell("G6"_ppos)->IsValid());
+    sheet->SetCell("H5"_ppos, "");
+    ASSERT(!sheet->GetImpCell("F5"_ppos)->IsValid());
+    ASSERT(!sheet->GetImpCell("G4"_ppos)->IsValid());
+    ASSERT(!sheet->GetImpCell("G6"_ppos)->IsValid());
+    val = sheet->GetCell("F5"_ppos)->GetValue();
+    ASSERT_EQUAL(get<double>(val), 0);
+    sheet->SetCell("G4"_ppos, "1");
+    val = sheet->GetCell("F5"_ppos)->GetValue();
+    ASSERT_EQUAL(get<double>(val), 1.0);
+    sheet->SetCell("H3"_ppos, "1");
+    ASSERT(sheet->GetImpCell("F5"_ppos)->IsValid());
+    val = sheet->GetCell("F5"_ppos)->GetValue();
+    ASSERT_EQUAL(get<double>(val), 1.0);
+  };
+
+  TestRunner tr;
+
+  RUN_TEST(tr, TestInvalidationAtChange_1);
+}
+void SheetTester::TestNoInvalidation() {
+  auto TestNoInvalidation_1 = []() {
+    auto sheet = CreateImpSheet();
+    sheet->SetCell("F5"_ppos, "=G4+G6");
+    sheet->SetCell("G4"_ppos, "=H3+H5");
+    sheet->SetCell("G6"_ppos, "=H5+H7");
+    sheet->SetCell("H3"_ppos, "1");
+    sheet->SetCell("H5"_ppos, "1");
+    sheet->SetCell("H7"_ppos, "1");
+    auto val = sheet->GetCell("F5"_ppos)->GetValue();
+    ASSERT_EQUAL(get<double>(val), 4.0);
+    sheet->SetCell("G4"_ppos, "2");
+    val = sheet->GetCell("F5"_ppos)->GetValue();
+    ASSERT_EQUAL(get<double>(val), 4.0);
+    sheet->SetCell("H3"_ppos, "0");
+    ASSERT(sheet->GetImpCell("F5"_ppos)->IsValid());
+    val = sheet->GetCell("F5"_ppos)->GetValue();
+    ASSERT_EQUAL(get<double>(val), 4.0);
+  };
+
+  TestRunner tr;
+  RUN_TEST(tr, TestNoInvalidation_1);
 }

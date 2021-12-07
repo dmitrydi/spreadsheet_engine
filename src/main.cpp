@@ -571,11 +571,9 @@ namespace {
 int main() {
   SheetTester sht;
   sht.TestAll();
-//  return 0;
-////  sht.TestCreateNewCell();
-////  return 0;
-////  throw std::runtime_error{"custom tests OK"};
+
   TestRunner tr;
+  RUN_TEST(tr, TestFormulaInvalidPosition);
   RUN_TEST(tr, TestPositionAndStringConversion);
   RUN_TEST(tr, TestPositionToStringInvalid);
   RUN_TEST(tr, TestStringToPositionInvalid);
@@ -594,7 +592,7 @@ int main() {
   RUN_TEST(tr, TestErrorValue);
   RUN_TEST(tr, TestErrorDiv0);
   RUN_TEST(tr, TestEmptyCellTreatedAsZero);
-  RUN_TEST(tr, TestFormulaInvalidPosition);
+
   RUN_TEST(tr, TestCellErrorPropagation);
   RUN_TEST(tr, TestCellsDeletionSimple);
   RUN_TEST(tr, TestCellsDeletion);

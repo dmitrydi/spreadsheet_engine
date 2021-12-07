@@ -45,10 +45,10 @@ private:
   std::pair<int, int> FindBottomOffset();
   void SqueezePrintableArea(Position deleted_position);
   void DeleteCell(Position pos);
+  void ResetCell(Position pos);
   ImpCell* CreateEmptyCell(Position pos);
   void CreateCell(Position pos, std::string text, std::unique_ptr<ImpFormula>&& formula);
-  void InvalidateDependencyGraph(Position pos);
-  void UpdateDependencyGraph(Position pos);
+
 
   ImpCell* GetImpCell(Position pos);
   const ImpCell* GetImpCell(Position pos) const;
@@ -59,27 +59,16 @@ private:
     return {pos.row - LTC.row, pos.col - LTC.col};
   }
 
-
-//  void ResetCell(Position pos);
-//
-//  void MaybeResizePrintableArea(Position deleted_pos);
-//  void MaybeExpandPrintableArea(Position pos) {
-//    if (pos.row < printable_LTC.row)
-//      printable_LTC.row = pos.row;
-//    if (pos.col < printable_LTC.col)
-//      printable_LTC.col = pos.col;
-//    if (printable_RBC.row < pos.row)
-//      printable_RBC.row = pos.row;
-//    if (printable_RBC.col < pos.col)
-//      printable_RBC.col = pos.col;
-//  }
-//  ImpCell* CreateNewCell(Position pos, bool resize_printable_area);
-
   using Graph = std::unordered_map<Position, std::unordered_set<Position, PosHasher>, PosHasher>;
 
+  mutable Graph reference_graph;
   mutable Graph dependency_graph;
   bool FormulaHasCircularRefs(Position current_pos, const std::unique_ptr<ImpFormula>& f) const;
   static bool GraphIsCircular(const Graph& graph, const Position start_vertex);
+  void InvalidateDependencyGraph(Position pos);
+  void UpdateReferenceGraph(Position pos);
+  void UpdateDependencyGraph(Position pos);
+  void RemoveDependencies(Position pos);
 
   enum class Color {
     white,
@@ -88,16 +77,7 @@ private:
   };
 
   void PopulateFormulaPtrs(std::unique_ptr<ImpFormula>& formula, Position formula_position);
-//
-//  void PopulateFormulaCells(const ImpFormula::UNode& root);
-//  void PopulateNode(ImpFormula::UNode& root);
-//
-//  void PopulateCellDependencies(Position pos);
-//  void PopulateCellPtrs(ImpCell* cell_ptr);
-//
-//  void AddDependentCell(const Position& to_cell, const Position& pos);
-//  void RemoveDependentCell(const Position& from_cell, const Position& pos);
-//  void InvalidateCell(Position pos);
+
 };
 
 std::unique_ptr<ImpSheet> CreateImpSheet();

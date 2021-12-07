@@ -6,22 +6,7 @@
 
 struct SheetTester {
   void TestAll();
-
-  /*
-  pair<int, int> GetInsertPosition(Position pos);
-void ExpandPrintableArea(Position pos);
-optional<int> FirstNonzeroElement(int idx);
-optional<int> LastNonzeroElement(int idx);
-pair<int,int> FindTopOffset();
-pair<int, int> FindBottomOffset();
-void SqueezePrintableArea(Position deleted_position);
-void DeleteCell(Position pos);
-void ClearCell(Position pos);
-ImpCell* CreateEmptyCell(Position pos);
-void CreateCell(Position pos, string text, unique_ptr<ImpFormula>&& formula);
-void InvalidateDependencyGraph(Position pos);
-void UpdateDependencyGraph(Position pos);
-   */
+  void TestPositionFromString();
   void TestGetInsertPosition();
   void TestExpandPrintableArea();
   void TestFirstNonzeroElement();
@@ -37,5 +22,14 @@ void UpdateDependencyGraph(Position pos);
   void TestUpdateDependencyGraph();
 
   void TestCreateNewCell();
+
+  static void PrintGraph(const ImpSheet::Graph& gr);
+  void TestFormulaHasCircularRefs();
+  // changing cells tests
+  static bool GraphsEqual(const ImpSheet::Graph& lhs, const ImpSheet::Graph& rhs);
+  void TestDepGraphChange();
+  void TestRefGraphChange();
+  void TestInvalidationAtChange();
+  void TestNoInvalidation();
 
 };

@@ -133,36 +133,39 @@ void ImpFormula::VisitCells(const Unode& root, std::vector<Position>& positions)
 std::unique_ptr<ImpFormula> ParseImpFormula(std::string expression) {
 //  if (!(expression[0] == '=') || expression.size() < 2)
 //    return nullptr;
+try {
+    auto ret = make_unique<ImpFormula>();
 
-  auto ret = make_unique<ImpFormula>();
+    antlr4::ANTLRInputStream input(expression);
+    FormulaLexer lexer(&input);
+    BailErrorListener error_listener;
+    lexer.removeErrorListeners();
+    lexer.addErrorListener(&error_listener);
 
-  antlr4::ANTLRInputStream input(expression);
-  FormulaLexer lexer(&input);
-  BailErrorListener error_listener;
-  lexer.removeErrorListeners();
-  lexer.addErrorListener(&error_listener);
-
-  antlr4::CommonTokenStream tokens(&lexer);
-  FormulaParser parser(&tokens);
-  auto error_handler = std::make_shared<antlr4::BailErrorStrategy>();
-  parser.setErrorHandler(error_handler);
-  parser.removeErrorListeners();
+    antlr4::CommonTokenStream tokens(&lexer);
+    FormulaParser parser(&tokens);
+    auto error_handler = std::make_shared<antlr4::BailErrorStrategy>();
+    parser.setErrorHandler(error_handler);
+    parser.removeErrorListeners();
 
 
-  antlr4::tree::ParseTree* tree = parser.main();
-  FormulaCustomListener listener;
-  antlr4::tree::ParseTreeWalker::DEFAULT.walk(&listener, tree);
+    antlr4::tree::ParseTree* tree = parser.main();
+    FormulaCustomListener listener;
+    antlr4::tree::ParseTreeWalker::DEFAULT.walk(&listener, tree);
 
-  ret->ast = std::move(listener.GetAstRoot());
+    ret->ast = std::move(listener.GetAstRoot());
 
-  std::vector<Position> positions;
-  ImpFormula::VisitCells(ret->ast, positions);
-  std::sort(positions.begin(), positions.end());
-  auto last = std::unique(positions.begin(), positions.end());
-  positions.erase(last, positions.end());
-  ret->ref_cells = std::move(positions);
+    std::vector<Position> positions;
+    ImpFormula::VisitCells(ret->ast, positions);
+    std::sort(positions.begin(), positions.end());
+    auto last = std::unique(positions.begin(), positions.end());
+    positions.erase(last, positions.end());
+    ret->ref_cells = std::move(positions);
 
-  return ret;
+    return ret;
+} catch (...) {
+  throw FormulaException{expression};
+}
 }
 
 std::unique_ptr<IFormula> ParseFormula(string expression) {

@@ -15,7 +15,7 @@ void ImpSheet::SetCell(Position pos, string text) {
     throw InvalidPositionException{pos.ToString()};
   if ((text.size() > 1) && (text[0] == kFormulaSign)) {
     auto f = ParseImpFormula({next(text.begin()), text.end()});
-    if (f && FormulaHasCircularRefs(pos, f))
+    if (FormulaHasCircularRefs(pos, f))
       throw CircularDependencyException{text};
     else {
       PopulateFormulaPtrs(f, pos);
@@ -88,9 +88,6 @@ const ImpCell* ImpSheet::GetImpCell(Position pos) const {
 void ImpSheet::PopulateFormulaPtrs(unique_ptr<ImpFormula>& formula, Position formula_pos) {
   if (!formula)
     return;
-//  PopulateFormulaCells(formula.get()->ast);
-//  PopulateNode(formula.get()->ast);
-//  formula.get()->PopulatePtrs();
   ImpFormula::UNode& ast = formula.get()->ast;
   stack<AstNode*> st;
   st.push(ast.get());
@@ -101,6 +98,7 @@ void ImpSheet::PopulateFormulaPtrs(unique_ptr<ImpFormula>& formula, Position for
     if (pos) {
       if (!GetCell(*pos))
         CreateEmptyCell(*pos); // create empty cell
+      // need to update dependency graph, reference graph is updated in FormulaHasCircularRefs
       node->populate(*this);
       formula.get()->ref_ptrs.insert(GetImpCell(*pos));
     }
@@ -110,51 +108,7 @@ void ImpSheet::PopulateFormulaPtrs(unique_ptr<ImpFormula>& formula, Position for
   }
 }
 
-bool ImpSheet::GraphIsCircular(const Graph& graph, const Position start_vertex) {
-  unordered_map<Position, Color, PosHasher> color;
-  for (const auto& [k, refs]: graph) {
-    color[k] = Color::white;
-    for (const auto v: refs)
-      color[v] = Color::white;
-  }
-  stack<Position> st;
-  st.push(start_vertex);
-  while(!st.empty()) {
-    auto v = st.top();
-    st.pop();
-    if (color[v] == Color::white) {
-      color[v] = Color::gray;
-      st.push(v);
-      for (const auto& w: graph.at(v)) {
-        if (color[w] == Color::gray)
-          return true;
-        st.push(w);
-      }
-    } else if (color[v] == Color::gray)
-      color[v] = Color::black;
-  }
-  return false;
-}
 
-bool ImpSheet::FormulaHasCircularRefs(Position current_pos, const std::unique_ptr<ImpFormula>& f) const {
-  unordered_set<Position, PosHasher> temp;
-  if (dependency_graph.count(current_pos)) {
-    temp = move(dependency_graph[current_pos]);
-    dependency_graph.erase(current_pos);
-  }
-  for (const auto& pos: f->GetReferencedCells())
-    dependency_graph[current_pos].insert(pos);
-  if (GraphIsCircular(dependency_graph, current_pos)) {
-    if (temp.empty())
-      dependency_graph.erase(current_pos);
-    else
-      dependency_graph[current_pos] = move(temp);
-    return true;
-  }
-  for (auto& pos: temp)
-    dependency_graph[current_pos].insert(move(pos));
-  return false;
-}
 
 // new functions
 pair<int, int> ImpSheet::GetInsertPosition(Position pos) {
@@ -201,7 +155,7 @@ ImpCell* ImpSheet::CreateEmptyCell(Position pos) {
     }
 
 
-    cells[ins_row][ins_col] = make_unique<ImpCell>();
+    cells[ins_row][ins_col] = make_unique<ImpCell>(this);
     return cells[ins_row][ins_col].get();
 }
 
@@ -300,9 +254,35 @@ void ImpSheet::DeleteCell(Position pos) {
     row[del_col].reset(nullptr);
 }
 
+void ImpSheet::UpdateReferenceGraph(Position pos) {
+  if (reference_graph.count(pos))
+    reference_graph.erase(pos);
+}
+
+void ImpSheet::RemoveDependencies(Position pos) {
+  for (auto& [_, dep_cells]: dependency_graph) {
+    if (dep_cells.count(pos))
+      dep_cells.erase(pos);
+  }
+}
+
+void ImpSheet::ResetCell(Position pos) {
+  ImpCell* ptr = GetImpCell(pos);
+  if (!ptr)
+    return;
+  InvalidateDependencyGraph(pos);
+  RemoveDependencies(pos);
+  UpdateReferenceGraph(pos);
+  ptr->Clear();
+  SqueezePrintableArea(pos);
+
+}
+
 void ImpSheet::ClearCell(Position pos) {
     if (GetImpCell(pos)) {
         InvalidateDependencyGraph(pos);
+        RemoveDependencies(pos);
+        UpdateReferenceGraph(pos);
         DeleteCell(pos);
         SqueezePrintableArea(pos);
     }
@@ -310,24 +290,128 @@ void ImpSheet::ClearCell(Position pos) {
 
 void ImpSheet::CreateCell(Position pos, string text, unique_ptr<ImpFormula>&& formula) {
     ImpCell* ptr = GetImpCell(pos);
-    if (ptr) {
-        if (formula) {
-            if (formula->GetExpression() == ptr->GetText())
-                return;
-        }  else {
-            if (ptr->GetText() == text)
-                return;
-        }
-    }
-    ClearCell(pos);
-    ptr  = CreateEmptyCell(pos);
+//    if (ptr) {
+//        if (formula) {
+//            if (formula->GetExpression() == ptr->GetText())
+//                return;
+//        }  else {
+//            if (ptr->GetText() == text)
+//                return;
+//        }
+//    }
+    if (ptr)
+      ResetCell(pos);
+    else
+      ptr  = CreateEmptyCell(pos);
     if (!text.empty()) {
         ptr->SetText(move(text));
+        if (formula) {
+          for (const auto& ref_p: formula->GetReferencedCells())
+            reference_graph[pos].insert(ref_p);
+        }
         ptr->SetFormula(move(formula));
         ExpandPrintableArea(pos);
         UpdateDependencyGraph(pos); //?
     }
 }
 
-void ImpSheet::InvalidateDependencyGraph(Position pos) {}
-void ImpSheet::UpdateDependencyGraph(Position pos) {}
+void ImpSheet::InvalidateDependencyGraph(Position pos) {
+  if (!GetImpCell(pos))
+    return;
+  stack<Position> st;
+  st.push(pos);
+  while(!st.empty()) {
+    auto cur_pos = st.top();
+    st.pop();
+    GetImpCell(cur_pos)->Invalidate();
+    if (dependency_graph.count(cur_pos)) {
+      for (const auto& dep_pos: dependency_graph.at(cur_pos)) {
+        if (GetImpCell(dep_pos)->IsValid()) {
+          st.push(dep_pos);
+        }
+      }
+    }
+  }
+}
+
+//void ImpSheet::InvalidateDependencyGraph(Position pos) {
+//  auto ptr = GetImpCell(pos);
+//  if (!ptr )
+//    return;
+//  stack<ImpCell*> st;
+//  st.push(ptr);
+//  while(!st.empty()) {
+//    ptr = st.top();
+//    st.pop();
+//    if (ptr->IsValid()) {
+//      ptr->Invalidate();
+//      if (dependency_graph.count(pos)) {
+//        for (const auto& p: dependency_graph.at(pos)) {
+//          auto dep_ptr = GetImpCell(p);
+//          if (dep_ptr)
+//            st.push(dep_ptr);
+//        }
+//      }
+//    }
+//  }
+//}
+
+void ImpSheet::UpdateDependencyGraph(Position pos) {
+  const auto ptr = GetImpCell(pos);
+  for (const auto& p: ptr->GetReferencedCells()) {
+    dependency_graph[p].insert(pos);
+  }
+}
+
+bool ImpSheet::GraphIsCircular(const Graph& graph, const Position start_vertex) {
+  unordered_map<Position, Color, PosHasher> color;
+  for (const auto& [k, refs]: graph) {
+    color[k] = Color::white;
+    for (const auto v: refs)
+      color[v] = Color::white;
+  }
+  stack<Position> st;
+  st.push(start_vertex);
+  while(!st.empty()) {
+    auto v = st.top();
+    st.pop();
+    if (color[v] == Color::white) {
+      color[v] = Color::gray;
+      st.push(v);
+      if (graph.count(v)) {
+        for (const auto& w: graph.at(v)) {
+          if (color[w] == Color::gray) {
+            return true;
+          }
+          st.push(w);
+        }
+      }
+    } else if (color[v] == Color::gray)
+      color[v] = Color::black;
+  }
+  return false;
+}
+
+bool ImpSheet::FormulaHasCircularRefs(Position current_pos, const std::unique_ptr<ImpFormula>& f) const {
+  unordered_set<Position, PosHasher> temp;
+  if (reference_graph.count(current_pos)) {
+    temp = move(reference_graph[current_pos]);
+    reference_graph.erase(current_pos);
+  }
+  //cerr << "referenced cells for " << current_pos.ToString() << ": ";
+  for (const auto& pos: f->GetReferencedCells()) {
+  //  cerr << pos.ToString() << " ";
+    reference_graph[current_pos].insert(pos);
+  }
+  //cerr << endl;
+  if (GraphIsCircular(reference_graph, current_pos)) {
+    if (temp.empty())
+      reference_graph.erase(current_pos);
+    else
+      reference_graph[current_pos] = move(temp);
+    return true;
+  }
+  for (auto& pos: temp)
+    reference_graph[current_pos].insert(move(pos));
+  return false;
+}
