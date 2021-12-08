@@ -7,12 +7,19 @@ using namespace std;
 
 // Position
 
+ostream& operator<<(std::ostream& output, Position pos) {
+  return output << "(" << pos.row << ", " << pos.col << ")";
+}
+
 bool Position::operator==(const Position& rhs) const {
     return row == rhs.row && col == rhs.col;
 }
 
 bool Position::operator<(const Position& rhs) const {
-    return row < rhs.row || col < rhs.col;
+  if (row == rhs.row)
+    return col < rhs.col;
+  return row < rhs.row;
+    //return row < rhs.row || col < rhs.col;
 }
 
 bool Position::IsValid() const {

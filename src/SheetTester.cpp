@@ -14,6 +14,7 @@ void SheetTester::TestAll() {
   TestInvalidationAtChange();
   TestNoInvalidation();
 
+  TestInsertRows();
 //  TestExpandPrintableArea();
 //  TestFirstNonzeroElement();
 //  TestLastNonzeroElement();
@@ -659,4 +660,154 @@ void SheetTester::TestNoInvalidation() {
 
   TestRunner tr;
   RUN_TEST(tr, TestNoInvalidation_1);
+}
+
+vector<Position> SheetTester::GetNodeRefs(AstNode* root) {
+  stack<AstNode*> st;
+  st.push(root);
+  vector<Position> ans;
+  while(!st.empty()) {
+    AstNode* tp = st.top();
+    st.pop();
+    auto pos = tp->get_position();
+    if (pos) {
+      ans.push_back(*pos);
+    }
+    for (auto& ch: tp->get_children()) {
+      st.push(ch.get());
+    }
+  }
+  sort(ans.begin(), ans.end());
+  return ans;
+}
+
+void SheetTester::TestInsertRows() {
+  auto TestInsertRows_Before = []() {
+    auto sheet = CreateImpSheet();
+    sheet->SetCell("A2"_ppos, "=B2+A3+1");
+    sheet->SetCell("A3"_ppos, "=B3+A4+1");
+    sheet->SetCell("A4"_ppos, "=B4+A5+1");
+    sheet->SetCell("B2"_ppos, "=C2+B3+1");
+    sheet->SetCell("B3"_ppos, "=C3+B4+1");
+    sheet->SetCell("B4"_ppos, "=C4+B5+1");
+    sheet->SetCell("C2"_ppos, "=D2+C3+1");
+    sheet->SetCell("C3"_ppos, "=D3+C4+1");
+    sheet->SetCell("C4"_ppos, "=D4+C5+1");
+    ASSERT_EQUAL(sheet->LTC.ToString(), "A2");
+    ASSERT_EQUAL(sheet->RBC.ToString(), "D5");
+    ASSERT(sheet->GetCell("A2"_ppos)->GetValue() == ICell::Value(19));
+    sheet->InsertRows(0, 3);
+    ASSERT_EQUAL(sheet->LTC.ToString(), "A5");
+    ASSERT_EQUAL(sheet->RBC.ToString(), "D8");
+    ASSERT(sheet->GetCell("A5"_ppos)->GetValue() == ICell::Value(19));
+    sheet->SetCell("C7"_ppos, "=D7+C8+2");
+    ASSERT(sheet->GetCell("A5"_ppos)->GetValue() == ICell::Value(25));
+
+    auto a1_ref = sheet->GetCell("A5"_ppos)->GetReferencedCells();
+    vector<Position> expected{"B5"_ppos, "A6"_ppos};
+    ASSERT_EQUAL(a1_ref, expected);
+
+    auto ast_ref = GetNodeRefs(sheet->GetImpCell("A5"_ppos)->formula->ast.get());
+    ASSERT_EQUAL(ast_ref, expected);
+  };
+
+  auto TestInsertRows_BeforeMain = []() {
+    auto sheet = CreateImpSheet();
+    sheet->SetCell("A2"_ppos, "=B2+A3+1+A1");
+    sheet->SetCell("A3"_ppos, "=B3+A4+1");
+    sheet->SetCell("A4"_ppos, "=B4+A5+1");
+    sheet->SetCell("B2"_ppos, "=C2+B3+1+B1");
+    sheet->SetCell("B3"_ppos, "=C3+B4+1");
+    sheet->SetCell("B4"_ppos, "=C4+B5+1");
+    sheet->SetCell("C2"_ppos, "=D2+C3+1+C1");
+    sheet->SetCell("C3"_ppos, "=D3+C4+1");
+    sheet->SetCell("C4"_ppos, "=D4+C5+1");
+    sheet->InsertRows(1, 1);
+    vector<Position> expected{"A1"_ppos, "B3"_ppos, "A4"_ppos};
+    ASSERT_EQUAL(sheet->GetCell("A3"_ppos)->GetReferencedCells(), expected);
+    sheet->SetCell("A1"_ppos, "1");
+    ASSERT(sheet->GetCell("A3"_ppos)->GetValue() == ICell::Value(20));
+    sheet->SetCell("B1"_ppos, "1");
+    ASSERT(sheet->GetCell("A3"_ppos)->GetValue() == ICell::Value(21));
+    ASSERT(sheet->GetCell("B3"_ppos)->GetValue() == ICell::Value(10));
+    sheet->SetCell("C1"_ppos, "1");
+    ASSERT(sheet->GetCell("A3"_ppos)->GetValue() == ICell::Value(22));
+    ASSERT(sheet->GetCell("B3"_ppos)->GetValue() == ICell::Value(11));
+    ASSERT(sheet->GetCell("C3"_ppos)->GetValue() == ICell::Value(4));
+    sheet->SetCell("A2"_ppos, "1");
+    sheet->SetCell("B2"_ppos, "1");
+    sheet->SetCell("C2"_ppos, "1");
+    ASSERT(sheet->GetCell("A3"_ppos)->GetValue() == ICell::Value(22));
+    ASSERT(sheet->GetCell("B3"_ppos)->GetValue() == ICell::Value(11));
+    ASSERT(sheet->GetCell("C3"_ppos)->GetValue() == ICell::Value(4));
+
+
+  };
+
+  auto TestInsertRows_Inside = []() {
+    auto sheet = CreateImpSheet();
+    sheet->SetCell("A2"_ppos, "=B2+A3+1");
+    sheet->SetCell("A3"_ppos, "=B3+A4+1");
+    sheet->SetCell("A4"_ppos, "=B4+A5+1");
+    sheet->SetCell("B2"_ppos, "=C2+B3+1");
+    sheet->SetCell("B3"_ppos, "=C3+B4+1");
+    sheet->SetCell("B4"_ppos, "=C4+B5+1");
+    sheet->SetCell("C2"_ppos, "=D2+C3+1");
+    sheet->SetCell("C3"_ppos, "=D3+C4+1");
+    sheet->SetCell("C4"_ppos, "=D4+C5+1");
+    auto ptrA3 = sheet->GetCell("A3"_ppos);
+    auto ptrA4 = sheet->GetCell("A4"_ppos);
+    sheet->InsertRows(2, 2);
+    ASSERT(sheet->GetCell("A2"_ppos)->GetValue() == ICell::Value(19));
+    ASSERT_EQUAL(sheet->GetCell("A5"_ppos), ptrA3);
+    ASSERT_EQUAL(sheet->GetCell("A6"_ppos), ptrA4);
+    ASSERT_EQUAL(sheet->LTC.ToString(), "A2");
+    ASSERT_EQUAL(sheet->RBC.ToString(), "D7");
+    sheet->SetCell("C6"_ppos, "=D6+C7+2");
+    ASSERT(sheet->GetCell("A2"_ppos)->GetValue() == ICell::Value(25));
+  };
+
+  auto TestInsertRows_AfterMain = [](){
+    auto sheet = CreateImpSheet();
+    sheet->SetCell("A2"_ppos, "=B2+A3+1");
+    sheet->SetCell("A3"_ppos, "=B3+A4+1");
+    sheet->SetCell("A4"_ppos, "=B4+A5+1");
+    sheet->SetCell("B2"_ppos, "=C2+B3+1");
+    sheet->SetCell("B3"_ppos, "=C3+B4+1");
+    sheet->SetCell("B4"_ppos, "=C4+B5+1");
+    sheet->SetCell("C2"_ppos, "=D2+C3+1");
+    sheet->SetCell("C3"_ppos, "=D3+C4+1");
+    sheet->SetCell("C4"_ppos, "=D4+C5+1");
+    sheet->InsertRows(4, 1);
+    ASSERT(sheet->GetCell("A4"_ppos)->GetValue() == ICell::Value(3));
+    sheet->SetCell("A6"_ppos, "1");
+    ASSERT(sheet->GetCell("A4"_ppos)->GetValue() == ICell::Value(4));
+    ASSERT(sheet->GetCell("A2"_ppos)->GetValue() == ICell::Value(20));
+    ASSERT_EQUAL(sheet->LTC.ToString(), "A2");
+    ASSERT_EQUAL(sheet->RBC.ToString(), "D6");
+  };
+
+  auto TestInsertRows_AfterAll = [](){
+    auto sheet = CreateImpSheet();
+    sheet->SetCell("A2"_ppos, "=B2+A3+1");
+    sheet->SetCell("A3"_ppos, "=B3+A4+1");
+    sheet->SetCell("A4"_ppos, "=B4+A5+1");
+    sheet->SetCell("B2"_ppos, "=C2+B3+1");
+    sheet->SetCell("B3"_ppos, "=C3+B4+1");
+    sheet->SetCell("B4"_ppos, "=C4+B5+1");
+    sheet->SetCell("C2"_ppos, "=D2+C3+1");
+    sheet->SetCell("C3"_ppos, "=D3+C4+1");
+    sheet->SetCell("C4"_ppos, "=D4+C5+1");
+    sheet->InsertRows(5, 1);
+    ASSERT_EQUAL(sheet->LTC.ToString(), "A2");
+    ASSERT_EQUAL(sheet->RBC.ToString(), "D5");
+  };
+
+  TestRunner tr;
+  RUN_TEST(tr, TestInsertRows_Before);
+  RUN_TEST(tr, TestInsertRows_BeforeMain);
+  RUN_TEST(tr, TestInsertRows_Inside);
+  RUN_TEST(tr, TestInsertRows_AfterMain);
+  RUN_TEST(tr, TestInsertRows_AfterAll);
+  //throw;
 }

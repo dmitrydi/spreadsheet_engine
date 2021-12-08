@@ -34,6 +34,7 @@ public:
   using Value = ICell::Value;
   virtual Value evaluate(const ISheet&) = 0;
   virtual std::optional<Position> get_position() const { return std::nullopt; }
+  virtual Position* get_mutable_position() { return nullptr; }
   virtual ICell* get_ptr() const { return nullptr; }
   virtual void populate(const ISheet& sh) {};
   std::vector<Unode>& get_children() {
@@ -182,6 +183,10 @@ public:
 
   std::optional<Position> get_position() const override {
     return pos;
+  }
+
+  Position* get_mutable_position() override {
+    return &pos;
   }
 
   ICell* get_ptr() const override {

@@ -25,6 +25,8 @@ struct Position {
   static const int kMaxCols = 16384;
 };
 
+std::ostream& operator<<(std::ostream& output, Position pos);
+
 struct Size {
   int rows = 0;
   int cols = 0;

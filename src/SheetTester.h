@@ -32,4 +32,9 @@ struct SheetTester {
   void TestInvalidationAtChange();
   void TestNoInvalidation();
 
+  // insertion tests
+  static std::vector<Position> GetNodeRefs(AstNode* root);
+  void TestInsertRows();
+
+
 };

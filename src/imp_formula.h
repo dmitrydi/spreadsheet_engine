@@ -13,6 +13,7 @@
 
 class ImpCell;
 class ImpSheet;
+class SheetTester;
 
 class ImpFormula: public IFormula {
 public:
@@ -30,19 +31,17 @@ public:
 private:
   friend class ImpCell;
   friend class ImpSheet;
+  friend class SheetTester;
   friend std::unique_ptr<ImpFormula> ParseImpFormula(std::string expression);
   using UNode = std::unique_ptr<AstNode>;
   UNode ast = nullptr;
-  // maybe move pointers from ast to a separate graph
   std::vector<Position> ref_cells; //always sorted
-  std::unordered_set<ImpCell*> ref_ptrs;
-  std::unordered_set<ImpCell*>& GetRefPtrs() {
-    return ref_ptrs;
-  }
-  void PopulatePtrs();
   mutable Value cached_val;
   mutable bool valid = false;
-
+  void MoveAstRowsByInsertion(int from, int count);
+  void MoveAstColsByInsertion(int from, int count);
+  void MoveAstRowsByDeletion(int from, int count);
+  void MoveAstColsByDeletion(int from, int count);
 
 };
 

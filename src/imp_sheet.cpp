@@ -33,8 +33,188 @@ ICell* ImpSheet::GetCell(Position pos) {
   return GetImpCell(pos);
 }
 
-void ImpSheet::InsertRows(int before, int count) {}
-void ImpSheet::InsertCols(int before, int count) {}
+void ImpSheet::CheckCellsSize(int row_count, int col_count) const {
+  if (RBC.row + row_count >= Position::kMaxRows)
+    throw TableTooBigException{to_string(RBC.row + row_count)};
+  if (RBC.col + col_count >= Position::kMaxCols)
+    throw TableTooBigException{to_string(RBC.col + col_count)};
+}
+
+void ImpSheet::CheckFormulas(int row_count, int col_count) const {
+  Position max_pos{-1,-1};
+  for (const auto& [cur_pos, ref_cells]: reference_graph) {
+    if (max_pos < cur_pos)
+      max_pos = cur_pos;
+    for (const auto& ref: ref_cells)
+      if (max_pos < ref)
+        max_pos = ref;
+  }
+  if (max_pos.row + row_count >= Position::kMaxRows)
+    throw TableTooBigException{to_string(max_pos.row + row_count)};
+  if (max_pos.col + col_count >= Position::kMaxCols)
+    throw TableTooBigException{to_string(max_pos.col + col_count)};
+}
+
+void ImpSheet::CreateRows(int before, int count) {
+  if (cells.empty()) {
+    return;
+  }
+  int insert_position = before - LTC.row;
+  if (insert_position < 0) {
+    LTC.row += count;
+    RBC.row += count;
+  } else if (insert_position >= 0 && insert_position < (int)cells.size()) {
+    vector<Row> to_insert(count);
+    auto it = cells.begin();
+    it += insert_position;
+    cells.insert(it, make_move_iterator(to_insert.begin()), make_move_iterator(to_insert.end()));
+    RBC.row += count;
+  }
+}
+void ImpSheet::UpdateFormulasByRowInsertion(int before, int count) {
+  // update all ast in formulas
+  for (size_t ridx = 0; ridx < cells.size(); ++ ridx) {
+    for (size_t cidx = 0; cidx < cells[ridx].size(); ++cidx) {
+      Position pos{LTC.row + (int)ridx, LTC.col + (int)cidx};
+      ImpCell* cell_ptr = GetImpCell(pos);
+      if (cell_ptr) {
+        if (cell_ptr->formula) {
+          auto hr = cell_ptr->formula->HandleInsertedRows(before, count);
+          if (hr == ImpFormula::HandlingResult::ReferencesRenamedOnly) {
+            //update expressions only
+          }
+        }
+      }
+    }
+  }
+}
+
+void ImpSheet::UpdateListByRow(unordered_set<Position, PosHasher>& dep_cells, int before, int count) {
+  vector<Position> to_update;
+  for (const auto& dep: dep_cells)
+    if (dep.row >= before)
+      to_update.push_back(dep);
+  for (const auto& del_pos: to_update)
+    dep_cells.erase(del_pos);
+  for (const auto& pos: to_update)
+    dep_cells.insert({pos.row + count, pos.col});
+}
+
+void ImpSheet::UpdateKeysByRow(Graph& gr, int before, int count) {
+  vector<Position> update_keys;
+  Graph tmp;
+  for (const auto& [k, _]: gr)
+    if (k.row >= before)
+      update_keys.push_back(k);
+  for (const auto key: update_keys) {
+    tmp[key] = move(gr[key]);
+    gr.erase(key);
+  }
+  for (const auto key: update_keys) {
+    gr[{key.row + count, key.col}] = move(tmp[key]);
+  }
+}
+
+void ImpSheet::UpdateGraphsByRowInsertion(int before, int count) {
+  for (auto& [_, dep_cells]: dependency_graph) {
+    UpdateListByRow(dep_cells, before, count);
+  }
+  UpdateKeysByRow(dependency_graph, before, count);
+
+  for (auto& [_, ref_cells]: reference_graph) {
+    UpdateListByRow(ref_cells, before, count);
+  }
+  UpdateKeysByRow(reference_graph, before, count);
+}
+
+void ImpSheet::CreateCols(int before, int count) {
+  if (cells.empty()) {
+    return;
+  }
+  int insert_position = before - LTC.col;
+  if (insert_position < 0) {
+    LTC.col += count;
+    RBC.col += count;
+  } else if (insert_position >= 0 && insert_position <= RBC.col - LTC.col) {
+    for (auto& row: cells) {
+      if (before < (int)row.size()) {
+        vector<unique_ptr<ImpCell>> new_cells;
+        auto it = row.begin() + before;
+        row.insert(it, make_move_iterator(new_cells.begin()), make_move_iterator(new_cells.end()));
+      }
+    }
+    RBC.col += count;
+  }
+}
+
+void ImpSheet::InsertRows(int before, int count) {
+  CheckCellsSize(count, 0);
+  CheckFormulas(count, 0);
+
+  UpdateFormulasByRowInsertion(before, count);
+  UpdateGraphsByRowInsertion(before, count);
+  CreateRows(before, count);
+}
+
+void ImpSheet::UpdateFormulasByColInsertion(int before, int count) {
+  for (const auto& row: cells)
+    for (const auto& cell: row)
+      if (cell) {
+        ImpCell* ptr = cell.get();
+        if (ptr->formula) {
+          auto hr = ptr->formula->HandleInsertedCols(before, count);
+          if (hr == ImpFormula::HandlingResult::ReferencesRenamedOnly) {
+            // maybe update expressions
+          }
+        }
+      }
+}
+
+void ImpSheet::UpdateListByCol(std::unordered_set<Position, PosHasher>& dep_cells, int before, int count) {
+  vector<Position> to_update;
+  for (const auto& dep: dep_cells)
+    if (dep.col >= before)
+      to_update.push_back(dep);
+  for (const auto& del_pos: to_update)
+    dep_cells.erase(del_pos);
+  for (const auto& pos: to_update)
+    dep_cells.insert({pos.row, pos.col + count});
+}
+void ImpSheet::UpdateKeysByCol(Graph& gr, int before, int count) {
+  vector<Position> update_keys;
+  Graph tmp;
+  for (const auto& [k, _]: gr)
+    if (k.col >= before)
+      update_keys.push_back(k);
+  for (const auto key: update_keys) {
+    tmp[key] = move(gr[key]);
+    gr.erase(key);
+  }
+  for (const auto key: update_keys) {
+    gr[{key.row, key.col + count}] = move(tmp[key]);
+  }
+}
+
+void ImpSheet::UpdateGraphsByColInsertion(int before, int count) {
+  for (auto& [_, dep_cells]: dependency_graph) {
+    UpdateListByCol(dep_cells, before, count);
+  }
+  UpdateKeysByCol(dependency_graph, before, count);
+
+  for (auto& [_, ref_cells]: reference_graph) {
+    UpdateListByCol(ref_cells, before, count);
+  }
+  UpdateKeysByCol(reference_graph, before, count);
+}
+
+void ImpSheet::InsertCols(int before, int count) {
+  CheckCellsSize(0, count);
+  CheckFormulas(0, count);
+
+  UpdateFormulasByColInsertion(before, count);
+  UpdateGraphsByColInsertion(before, count);
+  CreateCols(before, count);
+}
 void ImpSheet::DeleteRows(int first, int count) {}
 void ImpSheet::DeleteCols(int first, int count) {}
 
@@ -84,7 +264,6 @@ const ImpCell* ImpSheet::GetImpCell(Position pos) const {
   return row[in_pos.col].get();
 }
 
-
 void ImpSheet::PopulateFormulaPtrs(unique_ptr<ImpFormula>& formula, Position formula_pos) {
   if (!formula)
     return;
@@ -97,18 +276,14 @@ void ImpSheet::PopulateFormulaPtrs(unique_ptr<ImpFormula>& formula, Position for
     auto pos = node->get_position();
     if (pos) {
       if (!GetCell(*pos))
-        CreateEmptyCell(*pos); // create empty cell
-      // need to update dependency graph, reference graph is updated in FormulaHasCircularRefs
+        SetCell(*pos, "");
       node->populate(*this);
-      formula.get()->ref_ptrs.insert(GetImpCell(*pos));
     }
     for (auto& ch: node->get_children()) {
       st.push(ch.get());
     }
   }
 }
-
-
 
 // new functions
 pair<int, int> ImpSheet::GetInsertPosition(Position pos) {

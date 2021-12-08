@@ -70,6 +70,21 @@ private:
   void UpdateDependencyGraph(Position pos);
   void RemoveDependencies(Position pos);
 
+  // insertion
+  void CheckCellsSize(int row_count, int col_count) const;
+  void CheckFormulas(int row_count, int col_count) const;
+  void CreateRows(int before, int count);
+  void UpdateFormulasByRowInsertion(int before, int count);
+  void UpdateGraphsByRowInsertion(int before, int count);
+  void UpdateFormulasByColInsertion(int before, int count);
+  void UpdateGraphsByColInsertion(int before, int count);
+  void CreateCols(int before, int count);
+
+  static void UpdateListByRow(std::unordered_set<Position, PosHasher>& dep_cells, int before, int count);
+  static void UpdateKeysByRow(Graph& gr, int before, int count);
+  static void UpdateListByCol(std::unordered_set<Position, PosHasher>& dep_cells, int before, int count);
+  static void UpdateKeysByCol(Graph& gr, int before, int count);
+
   enum class Color {
     white,
     gray,
