@@ -26,7 +26,7 @@ ImpFormula::HandlingResult ImpFormula::HandleInsertedRows(int before, int count)
   if (before > ref_cells.back().row)
     return HandlingResult::NothingChanged;
 
-  auto it = lower_bound(ref_cells.begin(), ref_cells.end(), before, [](Position pos, double value) { return pos.row < value;});
+  auto it = lower_bound(ref_cells.begin(), ref_cells.end(), before, [](Position pos, int value) { return pos.row < value;});
   for (;it != ref_cells.end(); ++it) {
     it->row += count;
   }
@@ -36,12 +36,22 @@ ImpFormula::HandlingResult ImpFormula::HandleInsertedRows(int before, int count)
 }
 
 ImpFormula::HandlingResult ImpFormula::HandleInsertedCols(int before, int count) {
-  if (before > ref_cells.back().col)
+  int max_col = -1;
+  for (const auto& pos : ref_cells)
+    if (pos.col > max_col)
+      max_col = pos.col;
+
+  if (before >max_col)
     return HandlingResult::NothingChanged;
 
-  auto it = lower_bound(ref_cells.begin(), ref_cells.end(), before, [](Position pos, double value) { return pos.col < value;});
-  for (;it != ref_cells.end(); ++it) {
-    it->col += count;
+//  for (size_t i = 0; i < ref_cells.size(); ++i) {
+//    if (ref_cells[i].col >= before)
+//      ref_cells[i].col += count;
+//  }
+
+  for (auto& ref: ref_cells) {
+    if (ref.col >= before)
+      ref.col += count;
   }
 
   MoveAstColsByInsertion(before, count);

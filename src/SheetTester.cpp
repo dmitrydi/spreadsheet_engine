@@ -15,6 +15,7 @@ void SheetTester::TestAll() {
   TestNoInvalidation();
 
   TestInsertRows();
+  TestInsertCols();
 //  TestExpandPrintableArea();
 //  TestFirstNonzeroElement();
 //  TestLastNonzeroElement();
@@ -810,4 +811,87 @@ void SheetTester::TestInsertRows() {
   RUN_TEST(tr, TestInsertRows_AfterMain);
   RUN_TEST(tr, TestInsertRows_AfterAll);
   //throw;
+}
+
+bool SheetTester::VectorAndSetEqual(const std::vector<Position>& vpos, const std::unordered_set<Position, PosHasher>& spos) {
+  if (vpos.size() != spos.size())
+    return false;
+  for (const auto& p: vpos)
+    if (!spos.count(p))
+      return false;
+  return true;
+}
+
+void SheetTester::TestInsertCols() {
+  auto TestInsertCols_BeforeAll = [](){
+    auto sheet = CreateImpSheet();
+    sheet->SetCell("B2"_ppos, "=B3+C2+1");
+    sheet->SetCell("B3"_ppos, "=B4+C3+1");
+    sheet->SetCell("B4"_ppos, "=B5+C4+1");
+    sheet->SetCell("C2"_ppos, "=C3+D2+1");
+    sheet->SetCell("C3"_ppos, "=C4+D3+1");
+    sheet->SetCell("C4"_ppos, "=C5+D4+1");
+    sheet->SetCell("D2"_ppos, "=D3+E2+1");
+    sheet->SetCell("D3"_ppos, "=D4+E3+1");
+    sheet->SetCell("D4"_ppos, "=D5+E4+1");
+    sheet->InsertCols(0);
+    ASSERT_EQUAL(sheet->LTC.ToString(), "C2");
+    ASSERT_EQUAL(sheet->RBC.ToString(), "F5");
+    vector<Position> expected{"D2"_ppos, "C3"_ppos};
+    ASSERT_EQUAL(sheet->GetCell("C2"_ppos)->GetReferencedCells(), expected);
+    ASSERT_EQUAL(GetNodeRefs(sheet->GetImpCell("C2"_ppos)->formula->ast.get()), expected);
+  };
+
+  auto TestInsertCols_BeforeMain = []() {
+    auto sheet = CreateImpSheet();
+    sheet->SetCell("B2"_ppos, "=B3+C2+1+A2");
+    sheet->SetCell("B3"_ppos, "=B4+C3+1+A3");
+    sheet->SetCell("B4"_ppos, "=B5+C4+1+A4");
+    sheet->SetCell("C2"_ppos, "=C3+D2+1");
+    sheet->SetCell("C3"_ppos, "=C4+D3+1");
+    sheet->SetCell("C4"_ppos, "=C5+D4+1");
+    sheet->SetCell("D2"_ppos, "=D3+E2+1");
+    sheet->SetCell("D3"_ppos, "=D4+E3+1");
+    sheet->SetCell("D4"_ppos, "=D5+E4+1");
+    auto b2_ptr = sheet->GetCell("B2"_ppos);
+    sheet->InsertCols(1);
+    ASSERT_EQUAL(sheet->GetCell("C2"_ppos), b2_ptr);
+    ASSERT_EQUAL(sheet->LTC.ToString(), "A2");
+    ASSERT_EQUAL(sheet->RBC.ToString(), "F5");
+    ASSERT_EQUAL(sheet->dependency_graph.at("A2"_ppos).size(), 1u);
+    ASSERT(sheet->dependency_graph.at("A2"_ppos).count("C2"_ppos));
+    vector<Position> c2_ref(sheet->reference_graph.at("C2"_ppos).begin(), sheet->reference_graph.at("C2"_ppos).end());
+    sort(c2_ref.begin(), c2_ref.end());
+    vector<Position> c2_ref_expected{"A2"_ppos, "D2"_ppos, "C3"_ppos};
+    ASSERT_EQUAL(c2_ref, c2_ref_expected);
+    ASSERT_EQUAL(sheet->GetCell("C2"_ppos)->GetReferencedCells(), c2_ref_expected);
+    ASSERT_EQUAL(GetNodeRefs(sheet->GetImpCell("C2"_ppos)->formula->ast.get()), c2_ref_expected);
+  };
+
+  auto TestInsertCols_Inside = []() {
+    auto sheet = CreateImpSheet();
+    sheet->SetCell("B2"_ppos, "=B3+C2+1+A2");
+    sheet->SetCell("B3"_ppos, "=B4+C3+1+A3");
+    sheet->SetCell("B4"_ppos, "=B5+C4+1+A4");
+    sheet->SetCell("C2"_ppos, "=C3+D2+1");
+    sheet->SetCell("C3"_ppos, "=C4+D3+1");
+    sheet->SetCell("C4"_ppos, "=C5+D4+1");
+    sheet->SetCell("D2"_ppos, "=D3+E2+1");
+    sheet->SetCell("D3"_ppos, "=D4+E3+1");
+    sheet->SetCell("D4"_ppos, "=D5+E4+1");
+    auto c2_ptr = sheet->GetCell("C2"_ppos);
+    sheet->InsertCols(2, 3);
+    ASSERT_EQUAL(sheet->GetCell("F2"_ppos), c2_ptr);
+    vector<Position> b2_expected{"A2"_ppos, "F2"_ppos, "B3"_ppos};
+    ASSERT(VectorAndSetEqual(b2_expected, sheet->reference_graph.at("B2"_ppos)));
+    ASSERT_EQUAL(GetNodeRefs(sheet->GetImpCell("B2"_ppos)->formula->ast.get()), b2_expected);
+    ASSERT_EQUAL(sheet->GetCell("B2"_ppos)->GetReferencedCells(), b2_expected);
+
+  };
+
+  TestRunner tr;
+  RUN_TEST(tr, TestInsertCols_BeforeAll);
+  RUN_TEST(tr, TestInsertCols_BeforeMain);
+  RUN_TEST(tr, TestInsertCols_Inside);
+  throw;
 }

@@ -34,7 +34,9 @@ struct SheetTester {
 
   // insertion tests
   static std::vector<Position> GetNodeRefs(AstNode* root);
+  static bool VectorAndSetEqual(const std::vector<Position>& vpos, const std::unordered_set<Position, PosHasher>& spos);
   void TestInsertRows();
+  void TestInsertCols();
 
 
 };

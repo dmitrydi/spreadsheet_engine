@@ -55,22 +55,6 @@ void ImpSheet::CheckFormulas(int row_count, int col_count) const {
     throw TableTooBigException{to_string(max_pos.col + col_count)};
 }
 
-void ImpSheet::CreateRows(int before, int count) {
-  if (cells.empty()) {
-    return;
-  }
-  int insert_position = before - LTC.row;
-  if (insert_position < 0) {
-    LTC.row += count;
-    RBC.row += count;
-  } else if (insert_position >= 0 && insert_position < (int)cells.size()) {
-    vector<Row> to_insert(count);
-    auto it = cells.begin();
-    it += insert_position;
-    cells.insert(it, make_move_iterator(to_insert.begin()), make_move_iterator(to_insert.end()));
-    RBC.row += count;
-  }
-}
 void ImpSheet::UpdateFormulasByRowInsertion(int before, int count) {
   // update all ast in formulas
   for (size_t ridx = 0; ridx < cells.size(); ++ ridx) {
@@ -127,23 +111,20 @@ void ImpSheet::UpdateGraphsByRowInsertion(int before, int count) {
   UpdateKeysByRow(reference_graph, before, count);
 }
 
-void ImpSheet::CreateCols(int before, int count) {
+void ImpSheet::CreateRows(int before, int count) {
   if (cells.empty()) {
     return;
   }
-  int insert_position = before - LTC.col;
+  int insert_position = before - LTC.row;
   if (insert_position < 0) {
-    LTC.col += count;
-    RBC.col += count;
-  } else if (insert_position >= 0 && insert_position <= RBC.col - LTC.col) {
-    for (auto& row: cells) {
-      if (before < (int)row.size()) {
-        vector<unique_ptr<ImpCell>> new_cells;
-        auto it = row.begin() + before;
-        row.insert(it, make_move_iterator(new_cells.begin()), make_move_iterator(new_cells.end()));
-      }
-    }
-    RBC.col += count;
+    LTC.row += count;
+    RBC.row += count;
+  } else if (insert_position >= 0 && insert_position < (int)cells.size()) {
+    vector<Row> to_insert(count);
+    auto it = cells.begin();
+    it += insert_position;
+    cells.insert(it, make_move_iterator(to_insert.begin()), make_move_iterator(to_insert.end()));
+    RBC.row += count;
   }
 }
 
@@ -157,17 +138,20 @@ void ImpSheet::InsertRows(int before, int count) {
 }
 
 void ImpSheet::UpdateFormulasByColInsertion(int before, int count) {
-  for (const auto& row: cells)
-    for (const auto& cell: row)
-      if (cell) {
-        ImpCell* ptr = cell.get();
-        if (ptr->formula) {
-          auto hr = ptr->formula->HandleInsertedCols(before, count);
-          if (hr == ImpFormula::HandlingResult::ReferencesRenamedOnly) {
-            // maybe update expressions
+  for (size_t ridx = 0; ridx < cells.size(); ++ ridx) {
+      for (size_t cidx = 0; cidx < cells[ridx].size(); ++cidx) {
+        Position pos{LTC.row + (int)ridx, LTC.col + (int)cidx};
+        ImpCell* cell_ptr = GetImpCell(pos);
+        if (cell_ptr) {
+          if (cell_ptr->formula) {
+            auto hr = cell_ptr->formula->HandleInsertedCols(before, count);
+            if (hr == ImpFormula::HandlingResult::ReferencesRenamedOnly) {
+              //update expressions only
+            }
           }
         }
       }
+    }
 }
 
 void ImpSheet::UpdateListByCol(std::unordered_set<Position, PosHasher>& dep_cells, int before, int count) {
@@ -205,6 +189,26 @@ void ImpSheet::UpdateGraphsByColInsertion(int before, int count) {
     UpdateListByCol(ref_cells, before, count);
   }
   UpdateKeysByCol(reference_graph, before, count);
+}
+
+void ImpSheet::CreateCols(int before, int count) {
+  if (cells.empty()) {
+    return;
+  }
+  int insert_position = before - LTC.col;
+  if (insert_position < 0) {
+    LTC.col += count;
+    RBC.col += count;
+  } else if (insert_position >= 0 && insert_position <= RBC.col - LTC.col) {
+    for (auto& row: cells) {
+      if (before < (int)row.size()) {
+        vector<unique_ptr<ImpCell>> new_cells(count);
+        auto it = row.begin() + before;
+        row.insert(it, make_move_iterator(new_cells.begin()), make_move_iterator(new_cells.end()));
+      }
+    }
+    RBC.col += count;
+  }
 }
 
 void ImpSheet::InsertCols(int before, int count) {
