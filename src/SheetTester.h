@@ -38,5 +38,8 @@ struct SheetTester {
   void TestInsertRows();
   void TestInsertCols();
 
+  // expression tests
+  void TestGetExpression();
+
 
 };

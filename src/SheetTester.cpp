@@ -16,6 +16,7 @@ void SheetTester::TestAll() {
 
   TestInsertRows();
   TestInsertCols();
+  TestGetExpression();
 //  TestExpandPrintableArea();
 //  TestFirstNonzeroElement();
 //  TestLastNonzeroElement();
@@ -894,4 +895,42 @@ void SheetTester::TestInsertCols() {
   RUN_TEST(tr, TestInsertCols_BeforeMain);
   RUN_TEST(tr, TestInsertCols_Inside);
   //throw;
+}
+
+void SheetTester::TestGetExpression() {
+  auto TestGetExpression_Simple = []() {
+//    auto sheet = CreateImpSheet();
+//    sheet->SetCell("A1"_ppos, "=(A2/A3)/A4");
+//    ASSERT_EQUAL(sheet->GetImpCell("A1"_ppos)->GetText(), "A2/A3/A4");
+  };
+
+  auto TestGetExpression_AfterRowDeletion = []() {
+//    auto sheet = CreateImpSheet();
+//    sheet->SetCell("A1"_ppos, "=A2+A3");
+//    sheet->SetCell("A3"_ppos, "1");
+//    sheet->DeleteRows(1, 1);
+//    ASSERT_EQUAL(sheet->GetCell("A1"_ppos)->GetText(), "+A2");
+  };
+
+  auto TestGetExpression_Tricky = []() {
+//    auto sheet = CreateImpSheet();
+//    sheet->SetCell("A1"_ppos, "1");
+//    sheet->SetCell("A2"_ppos, "2");
+//    sheet->SetCell("A3"_ppos, "3");
+//    sheet->SetCell("C3"_ppos, "=A1 + A2 + A3"); // + A1 + A3 + A1 + A2 + A1
+//
+//    cerr << get<double>(sheet->GetImpCell("C3"_ppos)->GetValue()) << endl;
+//    cerr << sheet->GetImpCell("C3"_ppos)->GetText() << endl;
+//
+////    ASSERT_EQUAL(tricky->GetReferencedCells(),
+////                 (std::vector{"A1"_pos, "A2"_pos, "A3"_pos}));
+////    ASSERT_EQUAL(tricky->GetExpression(), "A1+A2+A1+A3+A1+A2+A1");
+  };
+
+  TestRunner tr;
+  RUN_TEST(tr, TestGetExpression_Simple);
+  RUN_TEST(tr, TestGetExpression_AfterRowDeletion);
+  RUN_TEST(tr, TestGetExpression_Tricky);
+
+ // throw;
 }

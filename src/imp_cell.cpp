@@ -36,7 +36,7 @@ optional<double> ImpCell::MaybeGetDouble(const string& str) {
 
 string ImpCell::GetText() const {
   if (formula)
-    return formula->GetExpression();
+    return "=" + formula->GetExpression();
   return raw_text;
 }
 

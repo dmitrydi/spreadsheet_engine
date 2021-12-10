@@ -17,7 +17,10 @@ Value ImpFormula::Evaluate(const ISheet& sheet) const {
 }
 
 std::string ImpFormula::GetExpression() const {
-  return {};
+  ostringstream os;
+  //os << "=";
+  ast->print(os);
+  return os.str();
 }
 
 std::vector<Position> ImpFormula::GetReferencedCells() const  {
@@ -64,6 +67,7 @@ ImpFormula::HandlingResult ImpFormula::HandleDeletedRows(int first, int count) {
     return HandlingResult::NothingChanged;
 
   auto it = lower_bound(ref_cells.begin(), ref_cells.end(), first, [](Position pos, double value) { return pos.row < value;});
+
   for ( ; it != ref_cells.end(); ++it) {
     if (it->row >= first && it->row <= first + count - 1) {
       self_hr = HandlingResult::ReferencesChanged;
@@ -71,6 +75,11 @@ ImpFormula::HandlingResult ImpFormula::HandleDeletedRows(int first, int count) {
     }
     else
       it->row -= count;
+  }
+  if (self_hr == HandlingResult::ReferencesChanged) {
+    sort(ref_cells.begin(), ref_cells.end());
+    auto it = lower_bound(ref_cells.begin(), ref_cells.end(), Position{0,0});
+    ref_cells.erase(ref_cells.begin(), it);
   }
   if (self_hr != HandlingResult::ReferencesChanged)
     self_hr = HandlingResult::ReferencesRenamedOnly;
@@ -98,6 +107,12 @@ ImpFormula::HandlingResult ImpFormula::HandleDeletedCols(int first, int count) {
         ref.col -= count;
       }
     }
+
+  if (self_hr == HandlingResult::ReferencesChanged) {
+    sort(ref_cells.begin(), ref_cells.end());
+    auto it = lower_bound(ref_cells.begin(), ref_cells.end(), Position{0,0});
+    ref_cells.erase(ref_cells.begin(), it);
+  }
 
   if (self_hr != HandlingResult::ReferencesChanged)
     self_hr = HandlingResult::ReferencesRenamedOnly;

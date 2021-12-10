@@ -49,6 +49,12 @@ public:
     children[pos] = std::move(ptr);
   }
   virtual void maybe_insert_pos(std::vector<Position>& positions) const {};
+
+  virtual void print(std::ostream& os) const = 0;
+  virtual void print_as_son(std::ostream& os, char parent_op) const = 0;
+  virtual void print_as_left_son(std::ostream& os, char parent_op) const = 0;
+  virtual void print_as_right_son(std::ostream& os, char parent_op) const = 0;
+
   virtual ~AstNode() = default;
   friend class SheetTester;
 protected:
@@ -61,12 +67,26 @@ public:
 };
 
 
+
 class AstNum: public AstNode {
 public:
   AstNum(double num): num(num) {};
   Value evaluate(const ISheet&) override {
     return {num};
   }
+  void print(std::ostream& os) const override {
+    os << num;
+  };
+  void print_as_son(std::ostream& os, char parent_op) const override {
+    os << num;
+  };
+  void print_as_left_son(std::ostream& os, char parent_op) const override {
+    os << num;
+  };
+  void print_as_right_son(std::ostream& os, char parent_op) const override {
+    os << num;
+  };
+
 private:
   double num = 0.;
 };
@@ -74,6 +94,7 @@ private:
 
 struct UnaryOP {
   virtual double operator()(double val) const = 0;
+  virtual char symbol() const = 0;
   virtual ~UnaryOP() = default;
 };
 
@@ -81,11 +102,17 @@ struct UnaryPlus: UnaryOP {
   double operator()(double val) const override {
     return val;
   }
+  char symbol() const override {
+    return '+';
+  }
 };
 
 struct UnaryMinus: UnaryOP {
   double operator()(double val) const override {
     return -val;
+  }
+  char symbol() const override {
+    return '-';
   }
 };
 
@@ -106,12 +133,28 @@ public:
           }, children[0]->evaluate(sh)
         );
   }
-private:
+
+  void print(std::ostream& os) const override {
+    os << op->symbol();
+    children[0]->print_as_son(os, op->symbol());
+  };
+  void print_as_son(std::ostream& os, char parent_op) const override {
+    print(os);
+  };
+  void print_as_left_son(std::ostream& os, char parent_op) const override {
+    print(os);
+  };
+  void print_as_right_son(std::ostream& os, char parent_op) const override {
+    print(os);
+  };
+
+protected:
   std::unique_ptr<UnaryOP> op;
 };
 
 struct BinaryOP {
   virtual ICell::Value operator()(double lhs, double rhs) const = 0;
+  virtual char symbol() const = 0;
   virtual ~BinaryOP() = default;
 };
 
@@ -119,17 +162,26 @@ struct AddOp: BinaryOP {
   ICell::Value operator()(double lhs, double rhs) const override {
     return lhs + rhs;
   }
+  char symbol() const override {
+    return '+';
+  }
 };
 
 struct SubOp: BinaryOP {
   ICell::Value operator()(double lhs, double rhs) const override {
     return lhs - rhs;
   }
+  char symbol() const override {
+    return '-';
+  }
 };
 
 struct MulOp: BinaryOP {
   ICell::Value operator()(double lhs, double rhs) const override {
     return lhs * rhs;
+  }
+  char symbol() const override {
+    return '*';
   }
 };
 
@@ -138,6 +190,9 @@ struct DivOp: BinaryOP {
     if (abs(rhs) < std::numeric_limits<double>::min())
       return FormulaError(FormulaError::Category::Div0);
     return lhs / rhs;
+  }
+  char symbol() const override {
+    return '/';
   }
 };
 
@@ -164,7 +219,52 @@ public:
         }, children[0]->evaluate(sh), children[1]->evaluate(sh)
     );
   }
-private:
+
+  void print(std::ostream& os) const override {
+    children[0]->print_as_left_son(os, op->symbol());
+    os << op->symbol();
+    children[1]->print_as_right_son(os, op->symbol());
+  };
+  void print_as_son(std::ostream& os, char parent_op) const override {
+    if (op->symbol() == '+' || op->symbol() == '-') {
+      os << '(';
+      print(os);
+      os << ')';
+    } else
+      print(os);
+  };
+  void print_as_left_son(std::ostream& os, char parent_op) const override {
+    if (op->symbol() == '+' || op->symbol() == '-') {
+      if (parent_op == '*' || parent_op == '/') {
+        os << '(';
+        print(os);
+        os << ')';
+      } else {
+        print(os);
+      }
+    } else {
+      print(os);
+    }
+  };
+  void print_as_right_son(std::ostream& os, char parent_op) const override {
+    if (op->symbol() == '+' || op->symbol() == '-') {
+      if (parent_op == '+')
+        print(os);
+      else {
+        os << '(';
+        print(os);
+        os << ')';
+      }
+    } else {
+      if (parent_op == '/') {
+        os << '(';
+        print(os);
+        os << ')';
+      } else
+        print(os);
+    }
+  };
+protected:
   std::unique_ptr<BinaryOP> op;
 
 };
@@ -214,7 +314,25 @@ public:
   void maybe_insert_pos(std::vector<Position>& positions) const override {
     positions.push_back(pos);
   }
-private:
+
+  void print(std::ostream& os) const override {
+    if (pos.IsValid()) {
+      os << pos.ToString();
+    } else {
+      os << "#REF!";
+    }
+
+  };
+  void print_as_son(std::ostream& os, char parent_op) const override {
+    print(os);
+  };
+  void print_as_left_son(std::ostream& os, char parent_op) const override {
+    print(os);
+  };
+  void print_as_right_son(std::ostream& os, char parent_op) const override {
+    print(os);
+  } ;
+protected:
   const ICell *cell_ptr;
   Position pos;
 
