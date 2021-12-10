@@ -85,6 +85,17 @@ private:
   static void UpdateListByCol(std::unordered_set<Position, PosHasher>& dep_cells, int before, int count);
   static void UpdateKeysByCol(Graph& gr, int before, int count);
 
+  // deletion
+  void UpdateFormulasByRowDeletion(int first,int count);
+  void UpdateGraphsBuRowDeletion(int first, int count);
+  void EraseRows(int first, int count);
+  void UpdateFoumulasByColDeletion(int first, int count);
+  void UpdateGraphsByColDeletion(int first, int count);
+  void EraseCols(int first, int count);
+
+  static void DeleteRowsFromGraph(Graph& gr, int first, int count);
+  static void DeleteColsFromGraph(Graph& gr, int first, int count);
+
   enum class Color {
     white,
     gray,

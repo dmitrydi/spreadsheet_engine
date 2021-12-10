@@ -5,6 +5,8 @@ using namespace std;
 using Value = ImpFormula::Value;
 
 Value ImpFormula::Evaluate(const ISheet& sheet) const {
+  if (self_hr == HandlingResult::ReferencesChanged)
+    return FormulaError(FormulaError::Category::Ref);
   visit(overload {
     [this](double val) { this->cached_val = val;},
     [this](const string& val) { this->cached_val = FormulaError(FormulaError::Category::Value); },
@@ -31,6 +33,8 @@ ImpFormula::HandlingResult ImpFormula::HandleInsertedRows(int before, int count)
     it->row += count;
   }
 
+  self_hr = HandlingResult::ReferencesRenamedOnly;
+
   MoveAstRowsByInsertion(before, count);
   return HandlingResult::ReferencesRenamedOnly;
 }
@@ -44,60 +48,138 @@ ImpFormula::HandlingResult ImpFormula::HandleInsertedCols(int before, int count)
   if (before >max_col)
     return HandlingResult::NothingChanged;
 
-//  for (size_t i = 0; i < ref_cells.size(); ++i) {
-//    if (ref_cells[i].col >= before)
-//      ref_cells[i].col += count;
-//  }
-
   for (auto& ref: ref_cells) {
     if (ref.col >= before)
       ref.col += count;
   }
+
+  self_hr = HandlingResult::ReferencesRenamedOnly;
 
   MoveAstColsByInsertion(before, count);
   return HandlingResult::ReferencesRenamedOnly;
 }
 
 ImpFormula::HandlingResult ImpFormula::HandleDeletedRows(int first, int count) {
-  if (first > ref_cells.back().row)
+  if (ref_cells.empty() || first > ref_cells.back().row)
     return HandlingResult::NothingChanged;
-  if (first + count - 1 < ref_cells[0].row) {
-    for (auto& ref: ref_cells)
-      ref.row -= count;
-    return HandlingResult::ReferencesRenamedOnly;
-  }
-  bool cell_deleted = false;
+
   auto it = lower_bound(ref_cells.begin(), ref_cells.end(), first, [](Position pos, double value) { return pos.row < value;});
   for ( ; it != ref_cells.end(); ++it) {
-    if (it->row >= first && it->row <= first + count - 1) { // to optimize
-      cell_deleted = true;
-      //*it = {-1,-1}; // invalid position
-    } else {
-      it->row -=count;
+    if (it->row >= first && it->row <= first + count - 1) {
+      self_hr = HandlingResult::ReferencesChanged;
+      *it = {-1, -1}; // invalid position
     }
+    else
+      it->row -= count;
   }
-  return cell_deleted ? HandlingResult::ReferencesChanged : HandlingResult::ReferencesRenamedOnly;
+  if (self_hr != HandlingResult::ReferencesChanged)
+    self_hr = HandlingResult::ReferencesRenamedOnly;
+
+  MoveAstRowsByDeletion(first, count);
+
+  return self_hr;
 }
 
 ImpFormula::HandlingResult ImpFormula::HandleDeletedCols(int first, int count) {
-  if (first > ref_cells.back().col)
+  int max_col = -1;
+  for (const auto& pos : ref_cells)
+    if (pos.col > max_col)
+      max_col = pos.col;
+
+  if (first >max_col)
     return HandlingResult::NothingChanged;
-  if (first + count - 1 < ref_cells[0].col) {
-    for (auto& ref: ref_cells)
-      ref.col -= count;
-    return HandlingResult::ReferencesRenamedOnly;
+
+  for (auto& ref: ref_cells)
+    if (ref.col >= first) {
+      if (ref.col <= first + count - 1) {
+        ref = {-1, -1}; //invalid position
+        self_hr = HandlingResult::ReferencesChanged;
+      } else {
+        ref.col -= count;
+      }
+    }
+
+  if (self_hr != HandlingResult::ReferencesChanged)
+    self_hr = HandlingResult::ReferencesRenamedOnly;
+
+  MoveAstColsByDeletion(first, count);
+
+  return self_hr;
+}
+
+
+
+void ImpFormula::MoveAstRowsByInsertion(int from, int count) {
+  stack<AstNode*> st;
+  st.push(ast.get());
+  while(!st.empty()) {
+    auto cptr = st.top();
+    st.pop();
+    auto mb_pos = cptr->get_mutable_position();
+    if (mb_pos) {
+      auto& pos_ref = *mb_pos;
+      if (pos_ref.row >= from)
+        pos_ref.row += count;
+    }
+    for (auto& ch: cptr->get_children())
+      st.push(ch.get());
   }
-  bool cell_deleted = false;
-   auto it = lower_bound(ref_cells.begin(), ref_cells.end(), first, [](Position pos, double value) { return pos.col < value;});
-   for ( ; it != ref_cells.end(); ++it) {
-     if (it->col >= first && it->col <= first + count - 1) { // to optimize
-       cell_deleted = true;
-       //*it = {-1,-1}; // invalid position
-     } else {
-       it->col -=count;
-     }
-   }
-   return cell_deleted ? HandlingResult::ReferencesChanged : HandlingResult::ReferencesRenamedOnly;
+}
+void ImpFormula::MoveAstColsByInsertion(int from, int count) {
+  stack<AstNode*> st;
+  st.push(ast.get());
+  while(!st.empty()) {
+    auto cptr = st.top();
+    st.pop();
+    auto mb_pos = cptr->get_mutable_position();
+    if (mb_pos) {
+      auto& pos_ref = *mb_pos;
+      if (pos_ref.col >= from)
+        pos_ref.col += count;
+    }
+    for (auto& ch: cptr->get_children())
+      st.push(ch.get());
+  }
+}
+void ImpFormula::MoveAstRowsByDeletion(int first, int count) {
+  stack<AstNode*> st;
+  st.push(ast.get());
+  while(!st.empty()) {
+    auto cptr = st.top();
+    st.pop();
+    auto mb_pos = cptr->get_mutable_position();
+    if (mb_pos) {
+      auto& pos_ref = *mb_pos;
+      if (pos_ref.row >= first) {
+        if (pos_ref.row <= first + count - 1)
+          pos_ref = {-1,-1};
+        else
+          pos_ref.row -= count;
+      }
+    }
+    for (auto& ch: cptr->get_children())
+      st.push(ch.get());
+  }
+}
+void ImpFormula::MoveAstColsByDeletion(int first, int count) {
+  stack<AstNode*> st;
+  st.push(ast.get());
+  while(!st.empty()) {
+    auto cptr = st.top();
+    st.pop();
+    auto mb_pos = cptr->get_mutable_position();
+    if (mb_pos) {
+      auto& pos_ref = *mb_pos;
+      if (pos_ref.col >= first) {
+        if (pos_ref.col <= first + count - 1)
+          pos_ref = {-1,-1};
+        else
+          pos_ref.col -= count;
+      }
+    }
+    for (auto& ch: cptr->get_children())
+      st.push(ch.get());
+  }
 }
 
 class BailErrorListener : public antlr4::BaseErrorListener {
@@ -161,43 +243,4 @@ try {
 
 std::unique_ptr<IFormula> ParseFormula(string expression) {
   return ParseImpFormula(move(expression));
-}
-
-void ImpFormula::MoveAstRowsByInsertion(int from, int count) {
-  stack<AstNode*> st;
-  st.push(ast.get());
-  while(!st.empty()) {
-    auto cptr = st.top();
-    st.pop();
-    auto mb_pos = cptr->get_mutable_position();
-    if (mb_pos) {
-      auto& pos_ref = *mb_pos;
-      if (pos_ref.row >= from)
-        pos_ref.row += count;
-    }
-    for (auto& ch: cptr->get_children())
-      st.push(ch.get());
-  }
-}
-void ImpFormula::MoveAstColsByInsertion(int from, int count) {
-  stack<AstNode*> st;
-  st.push(ast.get());
-  while(!st.empty()) {
-    auto cptr = st.top();
-    st.pop();
-    auto mb_pos = cptr->get_mutable_position();
-    if (mb_pos) {
-      auto& pos_ref = *mb_pos;
-      if (pos_ref.col >= from)
-        pos_ref.col += count;
-    }
-    for (auto& ch: cptr->get_children())
-      st.push(ch.get());
-  }
-}
-void ImpFormula::MoveAstRowsByDeletion(int from, int count) {
-
-}
-void ImpFormula::MoveAstColsByDeletion(int from, int count) {
-
 }

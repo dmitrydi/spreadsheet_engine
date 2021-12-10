@@ -893,5 +893,5 @@ void SheetTester::TestInsertCols() {
   RUN_TEST(tr, TestInsertCols_BeforeAll);
   RUN_TEST(tr, TestInsertCols_BeforeMain);
   RUN_TEST(tr, TestInsertCols_Inside);
-  throw;
+  //throw;
 }

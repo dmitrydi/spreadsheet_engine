@@ -219,8 +219,139 @@ void ImpSheet::InsertCols(int before, int count) {
   UpdateGraphsByColInsertion(before, count);
   CreateCols(before, count);
 }
-void ImpSheet::DeleteRows(int first, int count) {}
-void ImpSheet::DeleteCols(int first, int count) {}
+
+void ImpSheet::UpdateFormulasByRowDeletion(int first,int count) {
+  for (auto& row: cells)
+    for (auto& cell: row) {
+      if (cell && cell->formula)
+        cell->formula->HandleDeletedRows(first, count);
+    }
+}
+
+void ImpSheet::DeleteRowsFromGraph(Graph& gr, int first, int count) {
+  vector<Position> to_del_keys;
+
+  for (auto& [k, dep_cells]: gr) {
+    if (k.row >= first && k.row <= first + count - 1)
+      to_del_keys.push_back(k);
+
+    vector<Position> to_del_vals;
+    for (const auto& dep_cell: dep_cells) {
+      if (dep_cell.row >= first && dep_cell.row <= first + count - 1)
+        to_del_vals.push_back(dep_cell);
+    }
+    for (const auto& v: to_del_vals)
+      dep_cells.erase(v);
+  }
+  for (const auto& k: to_del_keys)
+    gr.erase(k);
+}
+
+void ImpSheet::UpdateGraphsBuRowDeletion(int first, int count) {
+  // invalidate dependency graphs
+  int start_row = max(first, LTC.row);
+  int end_row = first + count - 1;
+  for (int i = start_row; i <= min(end_row, RBC.row); ++i) {
+    for (int j = 0; j != (int)cells[i].size(); ++j) {
+      Position pos = {i, LTC.col + j};
+      InvalidateDependencyGraph(pos);
+    }
+  }
+  DeleteRowsFromGraph(dependency_graph, first, count);
+  DeleteRowsFromGraph(reference_graph, first, count);
+
+}
+void ImpSheet::EraseRows(int first, int count) {
+  if (first + count - 1 < LTC.row) {
+    LTC.row -= count;
+    RBC.row -= count;
+  } else if (first <= RBC.row ){
+    int start_row = max(0,first - LTC.row);
+    int end_row = min(first+count-1 - LTC.row, RBC.row);
+    int delta = end_row - start_row + 1;
+    auto it_first = cells.begin() + start_row;
+    auto it_last = cells.begin() + end_row + 1;
+    cells.erase(it_first, it_last);
+    RBC.row -= delta;
+  }
+}
+
+
+void ImpSheet::DeleteRows(int first, int count) {
+  UpdateFormulasByRowDeletion(first, count);
+  UpdateGraphsBuRowDeletion(first, count);
+  EraseRows(first, count);
+}
+
+void ImpSheet::UpdateFoumulasByColDeletion(int first, int count) {
+  // update all ast in formulas
+  for (size_t ridx = 0; ridx < cells.size(); ++ ridx) {
+    for (size_t cidx = 0; cidx < cells[ridx].size(); ++cidx) {
+      Position pos{LTC.row + (int)ridx, LTC.col + (int)cidx};
+      ImpCell* cell_ptr = GetImpCell(pos);
+      if (cell_ptr) {
+        if (cell_ptr->formula) {
+          auto hr = cell_ptr->formula->HandleDeletedCols(first, count);
+          if (hr == ImpFormula::HandlingResult::ReferencesRenamedOnly) {
+            //update expressions only
+          }
+        }
+      }
+    }
+  }
+}
+
+void ImpSheet::DeleteColsFromGraph(Graph& gr, int first, int count) {
+  vector<Position> to_del_keys;
+
+  for (auto& [k, dep_cells]: gr) {
+    if (k.col >= first && k.col <= first + count - 1)
+      to_del_keys.push_back(k);
+
+    vector<Position> to_del_vals;
+    for (const auto& dep_cell: dep_cells) {
+      if (dep_cell.col >= first && dep_cell.col <= first + count - 1)
+        to_del_vals.push_back(dep_cell);
+    }
+    for (const auto& v: to_del_vals)
+      dep_cells.erase(v);
+  }
+  for (const auto& k: to_del_keys)
+    gr.erase(k);
+}
+
+void ImpSheet::UpdateGraphsByColDeletion(int first, int count) {
+  // invalidate dependency graphs
+  for (int i = LTC.row; i <= RBC.row; ++i) {
+    for (int j = max(LTC.col, first); j <= min(RBC.col, first + count - 1); ++j) {
+      InvalidateDependencyGraph({i,j});
+    }
+  }
+  DeleteColsFromGraph(dependency_graph, first, count);
+  DeleteColsFromGraph(reference_graph, first, count);
+}
+void ImpSheet::EraseCols(int first, int count) {
+  if (first + count -1 < LTC.col) {
+    LTC.col -= count;
+    RBC.col -= count;
+  } else if (first <= RBC.col) {
+    int inner_start = max(LTC.col, first) - LTC.col;
+    int inner_end = min(RBC.col, first+count-1) - LTC.col;
+    int delta = inner_end - inner_start + 1;
+    for (auto& row: cells) {
+      auto it_first = row.begin() + inner_start;
+      auto it_last = row.begin() + inner_end + 1;
+      row.erase(it_first, it_last);
+    }
+    RBC.col -= delta;
+  }
+}
+
+void ImpSheet::DeleteCols(int first, int count) {
+  UpdateFoumulasByColDeletion(first, count);
+  UpdateGraphsByColDeletion(first, count);
+  EraseCols(first, count);
+}
 
 Size ImpSheet::GetPrintableSize() const {
   Size sz = {printable_RBC.row - printable_LTC.row + 1, printable_RBC.col - printable_LTC.col + 1};
@@ -512,28 +643,6 @@ void ImpSheet::InvalidateDependencyGraph(Position pos) {
     }
   }
 }
-
-//void ImpSheet::InvalidateDependencyGraph(Position pos) {
-//  auto ptr = GetImpCell(pos);
-//  if (!ptr )
-//    return;
-//  stack<ImpCell*> st;
-//  st.push(ptr);
-//  while(!st.empty()) {
-//    ptr = st.top();
-//    st.pop();
-//    if (ptr->IsValid()) {
-//      ptr->Invalidate();
-//      if (dependency_graph.count(pos)) {
-//        for (const auto& p: dependency_graph.at(pos)) {
-//          auto dep_ptr = GetImpCell(p);
-//          if (dep_ptr)
-//            st.push(dep_ptr);
-//        }
-//      }
-//    }
-//  }
-//}
 
 void ImpSheet::UpdateDependencyGraph(Position pos) {
   const auto ptr = GetImpCell(pos);

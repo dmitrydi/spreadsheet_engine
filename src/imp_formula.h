@@ -38,6 +38,7 @@ private:
   std::vector<Position> ref_cells; //always sorted
   mutable Value cached_val;
   mutable bool valid = false;
+  HandlingResult self_hr = HandlingResult::NothingChanged;
   void MoveAstRowsByInsertion(int from, int count);
   void MoveAstColsByInsertion(int from, int count);
   void MoveAstRowsByDeletion(int from, int count);

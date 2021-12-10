@@ -587,6 +587,9 @@ int main() {
   RUN_TEST(tr, TestFormulaIncorrect);
   RUN_TEST(tr, TestCellCircularReferences);
 
+  RUN_TEST(tr, TestCellsDeletionSimple);
+  RUN_TEST(tr, TestCellsDeletion);
+
   // undone
   RUN_TEST(tr, TestFormulaExpressionFormatting);
   RUN_TEST(tr, TestFormulaReferencedCells);
@@ -594,8 +597,7 @@ int main() {
   RUN_TEST(tr, TestFormulaHandleDeletion);
   RUN_TEST(tr, TestErrorDiv0);
   RUN_TEST(tr, TestCellErrorPropagation);
-  RUN_TEST(tr, TestCellsDeletionSimple);
-  RUN_TEST(tr, TestCellsDeletion);
+
   RUN_TEST(tr, TestPrint);
   return 0;
 }
