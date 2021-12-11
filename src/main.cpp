@@ -566,8 +566,8 @@ namespace {
 }
 
 int main() {
-  SheetTester sht;
-  sht.TestAll();
+//  SheetTester sht;
+//  sht.TestAll();
 
   TestRunner tr;
   RUN_TEST(tr, TestInsertionOverflow);

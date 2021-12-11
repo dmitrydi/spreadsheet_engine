@@ -37,12 +37,12 @@ private:
   Position printable_LTC = AbsMaxPos;
   Position printable_RBC = AbsMinPos;
 
-  std::pair<int, int> GetInsertPosition(Position pos);
+  std::pair<int, int> GetInsertPosition(Position pos) const;
   void ExpandPrintableArea(Position pos);
-  std::optional<int> FirstNonzeroElement(int idx);
-  std::optional<int> LastNonzeroElement(int idx);
-  std::pair<int,int> FindTopOffset();
-  std::pair<int, int> FindBottomOffset();
+  std::optional<int> FirstNonzeroElement(int idx) const;
+  std::optional<int> LastNonzeroElement(int idx) const;
+  std::pair<int,int> FindTopOffset() const;
+  std::pair<int, int> FindBottomOffset() const;
   void SqueezePrintableArea(Position deleted_position);
   void DeleteCell(Position pos);
   void ResetCell(Position pos);
@@ -60,6 +60,9 @@ private:
   }
 
   using Graph = std::unordered_map<Position, std::unordered_set<Position, PosHasher>, PosHasher>;
+
+  static void PrintValue(std::ostream& os, ICell::Value val);
+  static bool RowHasPrintableCells(const Row& row);
 
   mutable Graph reference_graph;
   mutable Graph dependency_graph;

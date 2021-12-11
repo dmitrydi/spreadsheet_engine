@@ -245,6 +245,20 @@ void ImpSheet::DeleteRowsFromGraph(Graph& gr, int first, int count) {
   }
   for (const auto& k: to_del_keys)
     gr.erase(k);
+
+  Graph tmp;
+  for (const auto& [k, dep_cells]: gr) {
+    Position new_key = k;
+    if (k.row >= first)
+      new_key.row -= count;
+    for (const auto& dep_cell: dep_cells) {
+      Position new_dep = dep_cell;
+      if (new_dep.row >= first)
+        new_dep.row -= count;
+      tmp[new_key].insert(new_dep);
+    }
+  }
+  swap(tmp, gr);
 }
 
 void ImpSheet::UpdateGraphsBuRowDeletion(int first, int count) {
@@ -318,6 +332,19 @@ void ImpSheet::DeleteColsFromGraph(Graph& gr, int first, int count) {
   }
   for (const auto& k: to_del_keys)
     gr.erase(k);
+
+  Graph tmp;
+  for (const auto& [k, dep_cells]: gr) {
+    Position new_key = k;
+    if (k.col >= first)
+      new_key.col -= count;
+    for (const auto& dep_cell: dep_cells) {
+      Position new_dep = dep_cell;
+      if (new_dep.col >= first)
+        new_dep.col -= count;
+      tmp[new_key].insert(new_dep);
+    }
+  }
 }
 
 void ImpSheet::UpdateGraphsByColDeletion(int first, int count) {
@@ -354,18 +381,97 @@ void ImpSheet::DeleteCols(int first, int count) {
 }
 
 Size ImpSheet::GetPrintableSize() const {
-  Size sz = {printable_RBC.row - printable_LTC.row + 1, printable_RBC.col - printable_LTC.col + 1};
-  if (sz.rows < 0 || sz.cols < 0)
+  if (cells.empty())
     return {0,0};
-  return sz;
+
+  auto bottom_offset = FindBottomOffset();
+
+
+  int vsize = RBC.row + 1 - bottom_offset.first;
+  if (vsize <= 0)
+    return {0,0};
+  int hsize = RBC.col + 1 - bottom_offset.second;
+  if (hsize <=0)
+    return {0,0};
+  return {vsize, hsize};
+}
+
+void ImpSheet::PrintValue(std::ostream& os, ICell::Value val) {
+  visit(
+      overload {
+    [&](FormulaError&& err) {
+      switch(err.GetCategory()) {
+        case FormulaError::Category::Div0:
+          os << "#DIV/0!";
+          break;
+        case FormulaError::Category::Ref:
+          os << "#REF!";
+          break;
+        case FormulaError::Category::Value:
+          os << "#VALUE!";
+          break;
+      }
+    },
+    [&](auto&& v) {
+      os << v;
+    }
+  },
+      val);
+}
+
+bool ImpSheet::RowHasPrintableCells(const Row& row) {
+  for (const auto& cell: row)
+    if(!cell->GetText().empty())
+      return true;
+  return false;
 }
 
 void ImpSheet::PrintValues(std::ostream& output) const {
-
+  auto psz = GetPrintableSize();
+  for (int ridx = 0; ridx < psz.rows; ++ridx) {
+    if(ridx < LTC.row) {
+      output << "\t";
+    } else {
+      if (!RowHasPrintableCells(cells[ridx-LTC.row]))
+        output << "\t";
+      else {
+        bool first = true;
+        for (int cidx = 0; cidx < psz.cols; ++cidx) {
+          if (!first)
+            output << "\t";
+          first = false;
+          auto ptr = GetCell({ridx, cidx});
+          if (ptr)
+            PrintValue(output, ptr->GetValue());
+        }
+      }
+    }
+    output << "\n";
+  }
 }
 
 void ImpSheet::PrintTexts(std::ostream& output) const {
-
+  auto psz = GetPrintableSize();
+  for (int ridx = 0; ridx < psz.rows; ++ridx) {
+    if(ridx < LTC.row) {
+      output << "\t";
+    } else {
+      if (!RowHasPrintableCells(cells[ridx-LTC.row]))
+        output << "\t";
+      else {
+        bool first = true;
+        for (int cidx = 0; cidx < psz.cols; ++cidx) {
+          if (!first)
+            output << "\t";
+          first = false;
+          auto ptr = GetCell({ridx, cidx});
+          if (ptr)
+            output << ptr->GetText();
+        }
+      }
+    }
+    output << "\n";
+  }
 }
 
 // ----------PRIVATE--------------
@@ -400,6 +506,7 @@ const ImpCell* ImpSheet::GetImpCell(Position pos) const {
 }
 
 void ImpSheet::PopulateFormulaPtrs(unique_ptr<ImpFormula>& formula, Position formula_pos) {
+
   if (!formula)
     return;
   ImpFormula::UNode& ast = formula.get()->ast;
@@ -418,10 +525,11 @@ void ImpSheet::PopulateFormulaPtrs(unique_ptr<ImpFormula>& formula, Position for
       st.push(ch.get());
     }
   }
+
 }
 
 // new functions
-pair<int, int> ImpSheet::GetInsertPosition(Position pos) {
+pair<int, int> ImpSheet::GetInsertPosition(Position pos) const {
     if (cells.empty())
         return {0,0};
     return {pos.row - LTC.row, pos.col - LTC.col};
@@ -476,7 +584,7 @@ void ImpSheet::ExpandPrintableArea(Position pos) {
     printable_RBC.col = max(printable_RBC.col, pos.col);
 }
 
-optional<int> ImpSheet::FirstNonzeroElement(int idx) {
+optional<int> ImpSheet::FirstNonzeroElement(int idx) const {
     if (idx < 0 || idx >= (int)cells.size())
         return nullopt;
     for (int i = 0; i < static_cast<int>(cells[idx].size()); i++) {
@@ -486,7 +594,7 @@ optional<int> ImpSheet::FirstNonzeroElement(int idx) {
     return nullopt;
 }
 
-optional<int> ImpSheet::LastNonzeroElement(int idx) {
+optional<int> ImpSheet::LastNonzeroElement(int idx) const {
     if (idx < 0 || idx >= (int)cells.size())
         return nullopt;
     for (int i = static_cast<int>(cells[idx].size()) - 1; i >= 0; --i) {
@@ -496,7 +604,7 @@ optional<int> ImpSheet::LastNonzeroElement(int idx) {
     return nullopt;
 }
 
-pair<int,int> ImpSheet::FindTopOffset() {
+pair<int,int> ImpSheet::FindTopOffset() const {
     int row_offset = 0;
     int col_offset = RBC.col;
     auto row_nnz = FirstNonzeroElement(row_offset);
@@ -511,7 +619,7 @@ pair<int,int> ImpSheet::FindTopOffset() {
     return {row_offset, col_offset};
 }
 
-pair<int, int> ImpSheet::FindBottomOffset() {
+pair<int, int> ImpSheet::FindBottomOffset() const {
     int row_offset = 0;
     int col_offset = 0;
     int i = static_cast<int>(cells.size()) - 1;
@@ -585,7 +693,6 @@ void ImpSheet::ResetCell(Position pos) {
   UpdateReferenceGraph(pos);
   ptr->Clear();
   SqueezePrintableArea(pos);
-
 }
 
 void ImpSheet::ClearCell(Position pos) {

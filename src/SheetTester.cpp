@@ -3,6 +3,7 @@
 using namespace std;
 
 void SheetTester::TestAll() {
+  TestDeletion();
   TestPositionFromString();
   TestGetInsertPosition();
   TestCreateEmptyCell();
@@ -17,6 +18,7 @@ void SheetTester::TestAll() {
   TestInsertRows();
   TestInsertCols();
   TestGetExpression();
+
 //  TestExpandPrintableArea();
 //  TestFirstNonzeroElement();
 //  TestLastNonzeroElement();
@@ -933,4 +935,23 @@ void SheetTester::TestGetExpression() {
   RUN_TEST(tr, TestGetExpression_Tricky);
 
  // throw;
+}
+
+void SheetTester::TestDeletion() {
+  auto TestDeletion_Propagation = []() {
+    auto sheet = CreateImpSheet();
+    sheet->SetCell("A1"_ppos, "=1");
+    sheet->SetCell("A2"_ppos, "=A1");
+    sheet->SetCell("A3"_ppos, "=A2");
+    auto ptr = sheet->GetImpCell("A3"_ppos);
+    sheet->DeleteRows(0);
+    ASSERT_EQUAL(ptr, sheet->GetImpCell("A2"_ppos));
+
+    sheet->SetCell("A2"_ppos, "=B1");
+
+  };
+
+  TestRunner tr;
+
+  RUN_TEST(tr, TestDeletion_Propagation);
 }

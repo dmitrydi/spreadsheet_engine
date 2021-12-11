@@ -41,5 +41,7 @@ struct SheetTester {
   // expression tests
   void TestGetExpression();
 
+  // deletion tests
+  void TestDeletion();
 
 };

@@ -8,6 +8,7 @@
 #include <iostream>
 #include <set>
 #include <optional>
+#include <cmath>
 
 class AstNode;
 class SheetTester;
@@ -160,6 +161,8 @@ struct BinaryOP {
 
 struct AddOp: BinaryOP {
   ICell::Value operator()(double lhs, double rhs) const override {
+    if (std::isinf(lhs+rhs))
+      return FormulaError(FormulaError::Category::Div0);
     return lhs + rhs;
   }
   char symbol() const override {
@@ -169,6 +172,8 @@ struct AddOp: BinaryOP {
 
 struct SubOp: BinaryOP {
   ICell::Value operator()(double lhs, double rhs) const override {
+    if (std::isinf(lhs-rhs))
+      return FormulaError(FormulaError::Category::Div0);
     return lhs - rhs;
   }
   char symbol() const override {
@@ -178,6 +183,8 @@ struct SubOp: BinaryOP {
 
 struct MulOp: BinaryOP {
   ICell::Value operator()(double lhs, double rhs) const override {
+    if (std::isinf(lhs*rhs))
+      return FormulaError(FormulaError::Category::Div0);
     return lhs * rhs;
   }
   char symbol() const override {
@@ -187,7 +194,7 @@ struct MulOp: BinaryOP {
 
 struct DivOp: BinaryOP {
   ICell::Value operator()(double lhs, double rhs) const override {
-    if (abs(rhs) < std::numeric_limits<double>::min())
+    if (std::isinf(lhs/rhs) || std::isnan(lhs/rhs))
       return FormulaError(FormulaError::Category::Div0);
     return lhs / rhs;
   }
