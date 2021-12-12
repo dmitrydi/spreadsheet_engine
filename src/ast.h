@@ -16,8 +16,6 @@ class SheetTester;
 static const std::unordered_set<char> UnaryOps = {'+', '-'};
 static const std::unordered_set<char> BinaryOps = {'+', '-', '*', '/'};
 
-
-
 class AstUnaryParseError {
 public:
   AstUnaryParseError() = default;

@@ -6,7 +6,6 @@
 #include <variant>
 #include <algorithm>
 #include <stack>
-#include "antlr4-runtime.h"
 #include "FormulaLexer.h"
 #include "FormulaCustomListener.h"
 #include "FormulaParser.h"

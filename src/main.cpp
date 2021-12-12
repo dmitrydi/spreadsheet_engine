@@ -591,7 +591,6 @@ int main() {
   RUN_TEST(tr, TestCellsDeletionSimple);
   RUN_TEST(tr, TestCellsDeletion);
 
-  // undone
   RUN_TEST(tr, TestFormulaExpressionFormatting);
   RUN_TEST(tr, TestFormulaReferencedCells);
   RUN_TEST(tr, TestFormulaHandleInsertion);

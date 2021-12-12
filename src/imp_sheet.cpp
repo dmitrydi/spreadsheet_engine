@@ -33,6 +33,115 @@ ICell* ImpSheet::GetCell(Position pos) {
   return GetImpCell(pos);
 }
 
+void ImpSheet::ClearCell(Position pos) {
+    if (GetImpCell(pos)) {
+        InvalidateDependencyGraph(pos);
+        RemoveDependencies(pos);
+        UpdateReferenceGraph(pos);
+        DeleteCell(pos);
+        //SqueezePrintableArea(pos);
+    }
+}
+
+void ImpSheet::InsertRows(int before, int count) {
+  CheckCellsSize(count, 0);
+  CheckFormulas(count, 0);
+
+  UpdateFormulasByRowInsertion(before, count);
+  UpdateGraphsByRowInsertion(before, count);
+  CreateRows(before, count);
+}
+
+void ImpSheet::InsertCols(int before, int count) {
+  CheckCellsSize(0, count);
+  CheckFormulas(0, count);
+
+  UpdateFormulasByColInsertion(before, count);
+  UpdateGraphsByColInsertion(before, count);
+  CreateCols(before, count);
+}
+
+void ImpSheet::DeleteRows(int first, int count) {
+  UpdateFormulasByRowDeletion(first, count);
+  UpdateGraphsBuRowDeletion(first, count);
+  EraseRows(first, count);
+}
+
+void ImpSheet::DeleteCols(int first, int count) {
+  UpdateFoumulasByColDeletion(first, count);
+  UpdateGraphsByColDeletion(first, count);
+  EraseCols(first, count);
+}
+
+Size ImpSheet::GetPrintableSize() const {
+  if (cells.empty())
+    return {0,0};
+
+  auto bottom_offset = FindBottomOffset();
+
+  int vsize = RBC.row + 1 - bottom_offset.first;
+  if (vsize <= 0)
+    return {0,0};
+  int hsize = RBC.col + 1 - bottom_offset.second;
+  if (hsize <=0)
+    return {0,0};
+  return {vsize, hsize};
+}
+
+void ImpSheet::PrintValues(std::ostream& output) const {
+  auto psz = GetPrintableSize();
+  for (int ridx = 0; ridx < psz.rows; ++ridx) {
+    if(ridx < LTC.row) {
+      output << "\t";
+    } else {
+      if (!RowHasPrintableCells(cells[ridx-LTC.row]))
+        output << "\t";
+      else {
+        bool first = true;
+        for (int cidx = 0; cidx < psz.cols; ++cidx) {
+          if (!first)
+            output << "\t";
+          first = false;
+          auto ptr = GetCell({ridx, cidx});
+          if (ptr)
+            PrintValue(output, ptr->GetValue());
+        }
+      }
+    }
+    output << "\n";
+  }
+}
+
+void ImpSheet::PrintTexts(std::ostream& output) const {
+  auto psz = GetPrintableSize();
+  for (int ridx = 0; ridx < psz.rows; ++ridx) {
+    if(ridx < LTC.row) {
+      output << "\t";
+    } else {
+      if (!RowHasPrintableCells(cells[ridx-LTC.row]))
+        output << "\t";
+      else {
+        bool first = true;
+        for (int cidx = 0; cidx < psz.cols; ++cidx) {
+          if (!first)
+            output << "\t";
+          first = false;
+          auto ptr = GetCell({ridx, cidx});
+          if (ptr)
+            output << ptr->GetText();
+        }
+      }
+    }
+    output << "\n";
+  }
+}
+
+// --------------PRIVATE--------------
+//
+//
+//
+//------------------------------------
+
 void ImpSheet::CheckCellsSize(int row_count, int col_count) const {
   if (RBC.row + row_count >= Position::kMaxRows)
     throw TableTooBigException{to_string(RBC.row + row_count)};
@@ -57,20 +166,10 @@ void ImpSheet::CheckFormulas(int row_count, int col_count) const {
 
 void ImpSheet::UpdateFormulasByRowInsertion(int before, int count) {
   // update all ast in formulas
-  for (size_t ridx = 0; ridx < cells.size(); ++ ridx) {
-    for (size_t cidx = 0; cidx < cells[ridx].size(); ++cidx) {
-      Position pos{LTC.row + (int)ridx, LTC.col + (int)cidx};
-      ImpCell* cell_ptr = GetImpCell(pos);
-      if (cell_ptr) {
-        if (cell_ptr->formula) {
-          auto hr = cell_ptr->formula->HandleInsertedRows(before, count);
-          if (hr == ImpFormula::HandlingResult::ReferencesRenamedOnly) {
-            //update expressions only
-          }
-        }
-      }
-    }
-  }
+  for (auto& row: cells)
+    for (auto& cell: row)
+      if (cell && cell->formula)
+        cell->formula->HandleInsertedRows(before, count);
 }
 
 void ImpSheet::UpdateListByRow(unordered_set<Position, PosHasher>& dep_cells, int before, int count) {
@@ -128,30 +227,11 @@ void ImpSheet::CreateRows(int before, int count) {
   }
 }
 
-void ImpSheet::InsertRows(int before, int count) {
-  CheckCellsSize(count, 0);
-  CheckFormulas(count, 0);
-
-  UpdateFormulasByRowInsertion(before, count);
-  UpdateGraphsByRowInsertion(before, count);
-  CreateRows(before, count);
-}
-
 void ImpSheet::UpdateFormulasByColInsertion(int before, int count) {
-  for (size_t ridx = 0; ridx < cells.size(); ++ ridx) {
-      for (size_t cidx = 0; cidx < cells[ridx].size(); ++cidx) {
-        Position pos{LTC.row + (int)ridx, LTC.col + (int)cidx};
-        ImpCell* cell_ptr = GetImpCell(pos);
-        if (cell_ptr) {
-          if (cell_ptr->formula) {
-            auto hr = cell_ptr->formula->HandleInsertedCols(before, count);
-            if (hr == ImpFormula::HandlingResult::ReferencesRenamedOnly) {
-              //update expressions only
-            }
-          }
-        }
-      }
-    }
+  for (auto& row: cells)
+    for (auto& cell: row)
+      if (cell && cell->formula)
+        cell->formula->HandleInsertedCols(before, count);
 }
 
 void ImpSheet::UpdateListByCol(std::unordered_set<Position, PosHasher>& dep_cells, int before, int count) {
@@ -164,6 +244,7 @@ void ImpSheet::UpdateListByCol(std::unordered_set<Position, PosHasher>& dep_cell
   for (const auto& pos: to_update)
     dep_cells.insert({pos.row, pos.col + count});
 }
+
 void ImpSheet::UpdateKeysByCol(Graph& gr, int before, int count) {
   vector<Position> update_keys;
   Graph tmp;
@@ -209,15 +290,6 @@ void ImpSheet::CreateCols(int before, int count) {
     }
     RBC.col += count;
   }
-}
-
-void ImpSheet::InsertCols(int before, int count) {
-  CheckCellsSize(0, count);
-  CheckFormulas(0, count);
-
-  UpdateFormulasByColInsertion(before, count);
-  UpdateGraphsByColInsertion(before, count);
-  CreateCols(before, count);
 }
 
 void ImpSheet::UpdateFormulasByRowDeletion(int first,int count) {
@@ -291,28 +363,14 @@ void ImpSheet::EraseRows(int first, int count) {
 }
 
 
-void ImpSheet::DeleteRows(int first, int count) {
-  UpdateFormulasByRowDeletion(first, count);
-  UpdateGraphsBuRowDeletion(first, count);
-  EraseRows(first, count);
-}
+
 
 void ImpSheet::UpdateFoumulasByColDeletion(int first, int count) {
-  // update all ast in formulas
-  for (size_t ridx = 0; ridx < cells.size(); ++ ridx) {
-    for (size_t cidx = 0; cidx < cells[ridx].size(); ++cidx) {
-      Position pos{LTC.row + (int)ridx, LTC.col + (int)cidx};
-      ImpCell* cell_ptr = GetImpCell(pos);
-      if (cell_ptr) {
-        if (cell_ptr->formula) {
-          auto hr = cell_ptr->formula->HandleDeletedCols(first, count);
-          if (hr == ImpFormula::HandlingResult::ReferencesRenamedOnly) {
-            //update expressions only
-          }
-        }
-      }
+  for (auto& row: cells)
+    for (auto& cell: row) {
+      if (cell && cell->formula)
+        cell->formula->HandleDeletedCols(first, count);
     }
-  }
 }
 
 void ImpSheet::DeleteColsFromGraph(Graph& gr, int first, int count) {
@@ -374,28 +432,6 @@ void ImpSheet::EraseCols(int first, int count) {
   }
 }
 
-void ImpSheet::DeleteCols(int first, int count) {
-  UpdateFoumulasByColDeletion(first, count);
-  UpdateGraphsByColDeletion(first, count);
-  EraseCols(first, count);
-}
-
-Size ImpSheet::GetPrintableSize() const {
-  if (cells.empty())
-    return {0,0};
-
-  auto bottom_offset = FindBottomOffset();
-
-
-  int vsize = RBC.row + 1 - bottom_offset.first;
-  if (vsize <= 0)
-    return {0,0};
-  int hsize = RBC.col + 1 - bottom_offset.second;
-  if (hsize <=0)
-    return {0,0};
-  return {vsize, hsize};
-}
-
 void ImpSheet::PrintValue(std::ostream& os, ICell::Value val) {
   visit(
       overload {
@@ -425,57 +461,6 @@ bool ImpSheet::RowHasPrintableCells(const Row& row) {
       return true;
   return false;
 }
-
-void ImpSheet::PrintValues(std::ostream& output) const {
-  auto psz = GetPrintableSize();
-  for (int ridx = 0; ridx < psz.rows; ++ridx) {
-    if(ridx < LTC.row) {
-      output << "\t";
-    } else {
-      if (!RowHasPrintableCells(cells[ridx-LTC.row]))
-        output << "\t";
-      else {
-        bool first = true;
-        for (int cidx = 0; cidx < psz.cols; ++cidx) {
-          if (!first)
-            output << "\t";
-          first = false;
-          auto ptr = GetCell({ridx, cidx});
-          if (ptr)
-            PrintValue(output, ptr->GetValue());
-        }
-      }
-    }
-    output << "\n";
-  }
-}
-
-void ImpSheet::PrintTexts(std::ostream& output) const {
-  auto psz = GetPrintableSize();
-  for (int ridx = 0; ridx < psz.rows; ++ridx) {
-    if(ridx < LTC.row) {
-      output << "\t";
-    } else {
-      if (!RowHasPrintableCells(cells[ridx-LTC.row]))
-        output << "\t";
-      else {
-        bool first = true;
-        for (int cidx = 0; cidx < psz.cols; ++cidx) {
-          if (!first)
-            output << "\t";
-          first = false;
-          auto ptr = GetCell({ridx, cidx});
-          if (ptr)
-            output << ptr->GetText();
-        }
-      }
-    }
-    output << "\n";
-  }
-}
-
-// ----------PRIVATE--------------
-
 
 ImpCell* ImpSheet::GetImpCell(Position pos) {
   if (cells.empty())
@@ -528,7 +513,6 @@ void ImpSheet::PopulateFormulaPtrs(unique_ptr<ImpFormula>& formula, Position for
 
 }
 
-// new functions
 pair<int, int> ImpSheet::GetInsertPosition(Position pos) const {
     if (cells.empty())
         return {0,0};
@@ -695,27 +679,12 @@ void ImpSheet::ResetCell(Position pos) {
   SqueezePrintableArea(pos);
 }
 
-void ImpSheet::ClearCell(Position pos) {
-    if (GetImpCell(pos)) {
-        InvalidateDependencyGraph(pos);
-        RemoveDependencies(pos);
-        UpdateReferenceGraph(pos);
-        DeleteCell(pos);
-        SqueezePrintableArea(pos);
-    }
-}
+
 
 void ImpSheet::CreateCell(Position pos, string text, unique_ptr<ImpFormula>&& formula) {
     ImpCell* ptr = GetImpCell(pos);
-//    if (ptr) {
-//        if (formula) {
-//            if (formula->GetExpression() == ptr->GetText())
-//                return;
-//        }  else {
-//            if (ptr->GetText() == text)
-//                return;
-//        }
-//    }
+    if (ptr && ptr->GetText() == text)
+      return;
     if (ptr)
       ResetCell(pos);
     else
@@ -758,24 +727,49 @@ void ImpSheet::UpdateDependencyGraph(Position pos) {
   }
 }
 
+//bool ImpSheet::GraphIsCircular(const Graph& graph, const Position start_vertex) {
+//  unordered_map<Position, Color, PosHasher> color;
+//  for (const auto& [k, refs]: graph) {
+//    color[k] = Color::white;
+//    for (const auto v: refs)
+//      color[v] = Color::white;
+//  }
+//  stack<Position> st;
+//  st.push(start_vertex);
+//  while(!st.empty()) {
+//    auto v = st.top();
+//    st.pop();
+//    if (color[v] == Color::white) {
+//      color[v] = Color::gray;
+//      st.push(v);
+//      if (graph.count(v)) {
+//        for (const auto& w: graph.at(v)) {
+//          if (color[w] == Color::gray) {
+//            return true;
+//          }
+//          st.push(w);
+//        }
+//      }
+//    } else if (color[v] == Color::gray)
+//      color[v] = Color::black;
+//  }
+//  return false;
+//}
+
 bool ImpSheet::GraphIsCircular(const Graph& graph, const Position start_vertex) {
   unordered_map<Position, Color, PosHasher> color;
-  for (const auto& [k, refs]: graph) {
-    color[k] = Color::white;
-    for (const auto v: refs)
-      color[v] = Color::white;
-  }
+
   stack<Position> st;
   st.push(start_vertex);
   while(!st.empty()) {
     auto v = st.top();
     st.pop();
-    if (color[v] == Color::white) {
+    if (!color.count(v)) {
       color[v] = Color::gray;
       st.push(v);
       if (graph.count(v)) {
         for (const auto& w: graph.at(v)) {
-          if (color[w] == Color::gray) {
+          if (color.count(w) && color[w] == Color::gray) {
             return true;
           }
           st.push(w);
@@ -793,12 +787,10 @@ bool ImpSheet::FormulaHasCircularRefs(Position current_pos, const std::unique_pt
     temp = move(reference_graph[current_pos]);
     reference_graph.erase(current_pos);
   }
-  //cerr << "referenced cells for " << current_pos.ToString() << ": ";
+
   for (const auto& pos: f->GetReferencedCells()) {
-  //  cerr << pos.ToString() << " ";
     reference_graph[current_pos].insert(pos);
   }
-  //cerr << endl;
   if (GraphIsCircular(reference_graph, current_pos)) {
     if (temp.empty())
       reference_graph.erase(current_pos);
