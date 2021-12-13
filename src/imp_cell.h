@@ -28,6 +28,7 @@ public:
 
   void Clear();
 private:
+  friend class ImpSheet;
   mutable CellState state = CellState::Invalid;
   mutable Value cached_value;
   const ISheet *parent = nullptr;
@@ -41,7 +42,7 @@ private:
 
   static std::optional<double> MaybeGetDouble(const std::string& str);
 
-  friend class ImpSheet;
+
   friend class SheetTester;
 
   std::string RenderText() const {

@@ -432,7 +432,7 @@ void ImpSheet::EraseCols(int first, int count) {
   }
 }
 
-void ImpSheet::PrintValue(std::ostream& os, ICell::Value val) {
+void PrintValue(std::ostream& os, ICell::Value val) {
   visit(
       overload {
     [&](FormulaError&& err) {

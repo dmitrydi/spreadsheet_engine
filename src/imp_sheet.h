@@ -9,6 +9,8 @@
 
 class SheetTester;
 
+void PrintValue(std::ostream& os, ICell::Value val);
+
 class ImpSheet: public ISheet {
 public:
   ImpSheet() = default;
@@ -56,7 +58,7 @@ private:
 
   using Graph = std::unordered_map<Position, std::unordered_set<Position, PosHasher>, PosHasher>;
 
-  static void PrintValue(std::ostream& os, ICell::Value val);
+
   static bool RowHasPrintableCells(const Row& row);
 
   mutable Graph reference_graph;
