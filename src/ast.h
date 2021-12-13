@@ -2,6 +2,8 @@
 
 #include "common.h"
 #include "utility.h"
+#include "unary_ops.h"
+#include "binary_ops.h"
 #include <memory>
 #include <unordered_set>
 #include <variant>
@@ -13,20 +15,12 @@
 class AstNode;
 class SheetTester;
 
-static const std::unordered_set<char> UnaryOps = {'+', '-'};
-static const std::unordered_set<char> BinaryOps = {'+', '-', '*', '/'};
-
-class AstUnaryParseError {
-public:
-  AstUnaryParseError() = default;
-};
-
-class AstBinaryParseError {
-public:
-  AstBinaryParseError() = default;
-};
-
 using Unode = std::unique_ptr<AstNode>;
+
+class AstNodeNotCompletedError {
+public:
+  AstNodeNotCompletedError() = default;
+};
 
 class AstNode {
 public:
@@ -36,17 +30,9 @@ public:
   virtual Position* get_mutable_position() { return nullptr; }
   virtual ICell* get_ptr() const { return nullptr; }
   virtual void populate(const ISheet& sh) {};
-  std::vector<Unode>& get_children() {
-    return children;
-  }
-  void push_child(Unode&& ptr) {
-    children.push_back(std::move(ptr));
-  }
-  void set_child(size_t pos, Unode&& ptr) {
-    if (children.size() <= pos)
-      children.resize(pos+1);
-    children[pos] = std::move(ptr);
-  }
+  std::vector<Unode>& get_children() { return children;  }
+  void push_child(Unode&& ptr) { children.push_back(std::move(ptr)); }
+  void set_child(size_t pos, Unode&& ptr);
   virtual void maybe_insert_pos(std::vector<Position>& positions) const {};
 
   virtual void print(std::ostream& os) const = 0;
@@ -60,283 +46,62 @@ protected:
   std::vector<Unode> children;
 };
 
-class AstNodeNotCompletedError {
-public:
-  AstNodeNotCompletedError() = default;
-};
-
-
-
 class AstNum: public AstNode {
 public:
   AstNum(double num): num(num) {};
-  Value evaluate(const ISheet&) override {
-    return {num};
-  }
-  void print(std::ostream& os) const override {
-    os << num;
-  };
-  void print_as_son(std::ostream& os, char parent_op) const override {
-    os << num;
-  };
-  void print_as_left_son(std::ostream& os, char parent_op) const override {
-    os << num;
-  };
-  void print_as_right_son(std::ostream& os, char parent_op) const override {
-    os << num;
-  };
-
+  Value evaluate(const ISheet&) override { return {num};  }
+  void print(std::ostream& os) const override { os << num; };
+  void print_as_son(std::ostream& os, char parent_op) const override { os << num; };
+  void print_as_left_son(std::ostream& os, char parent_op) const override { os << num; };
+  void print_as_right_son(std::ostream& os, char parent_op) const override { os << num; };
 private:
   double num = 0.;
 };
 
-
-struct UnaryOP {
-  virtual double operator()(double val) const = 0;
-  virtual char symbol() const = 0;
-  virtual ~UnaryOP() = default;
-};
-
-struct UnaryPlus: UnaryOP {
-  double operator()(double val) const override {
-    return val;
-  }
-  char symbol() const override {
-    return '+';
-  }
-};
-
-struct UnaryMinus: UnaryOP {
-  double operator()(double val) const override {
-    return -val;
-  }
-  char symbol() const override {
-    return '-';
-  }
-};
-
-std::unique_ptr<UnaryOP> make_unary_op(const char op);
-
 class AstUnary: public AstNode {
 public:
-  AstUnary(char op): op(make_unary_op(op)) {
-  };
-  Value evaluate (const ISheet& sh) override {
-    if (children.size() != 1)
-      throw AstNodeNotCompletedError{};
-    return std::visit(
-          overload{
-             [this](double arg) -> Value{return (*(this->op))(arg); },
-             [](const std::string&) -> Value{ return FormulaError(FormulaError::Category::Value); },
-             [](const FormulaError& err) -> Value{ return err;}
-          }, children[0]->evaluate(sh)
-        );
-  }
-
-  void print(std::ostream& os) const override {
-    os << op->symbol();
-    children[0]->print_as_son(os, op->symbol());
-  };
-  void print_as_son(std::ostream& os, char parent_op) const override {
-    print(os);
-  };
-  void print_as_left_son(std::ostream& os, char parent_op) const override {
-    print(os);
-  };
-  void print_as_right_son(std::ostream& os, char parent_op) const override {
-    print(os);
-  };
-
+  AstUnary(char op): op(make_unary_op(op)) { };
+  Value evaluate (const ISheet& sh) override;
+  void print(std::ostream& os) const override;
+  void print_as_son(std::ostream& os, char parent_op) const override { print(os); };
+  void print_as_left_son(std::ostream& os, char parent_op) const override { print(os); };
+  void print_as_right_son(std::ostream& os, char parent_op) const override { print(os); };
 protected:
   std::unique_ptr<UnaryOP> op;
 };
 
-struct BinaryOP {
-  virtual ICell::Value operator()(double lhs, double rhs) const = 0;
-  virtual char symbol() const = 0;
-  virtual ~BinaryOP() = default;
-};
 
-struct AddOp: BinaryOP {
-  ICell::Value operator()(double lhs, double rhs) const override {
-    if (std::isinf(lhs+rhs))
-      return FormulaError(FormulaError::Category::Div0);
-    return lhs + rhs;
-  }
-  char symbol() const override {
-    return '+';
-  }
-};
-
-struct SubOp: BinaryOP {
-  ICell::Value operator()(double lhs, double rhs) const override {
-    if (std::isinf(lhs-rhs))
-      return FormulaError(FormulaError::Category::Div0);
-    return lhs - rhs;
-  }
-  char symbol() const override {
-    return '-';
-  }
-};
-
-struct MulOp: BinaryOP {
-  ICell::Value operator()(double lhs, double rhs) const override {
-    if (std::isinf(lhs*rhs))
-      return FormulaError(FormulaError::Category::Div0);
-    return lhs * rhs;
-  }
-  char symbol() const override {
-    return '*';
-  }
-};
-
-struct DivOp: BinaryOP {
-  ICell::Value operator()(double lhs, double rhs) const override {
-    if (std::isinf(lhs/rhs) || std::isnan(lhs/rhs))
-      return FormulaError(FormulaError::Category::Div0);
-    return lhs / rhs;
-  }
-  char symbol() const override {
-    return '/';
-  }
-};
-
-std::unique_ptr<BinaryOP> make_binary_op(const char op);
 
 class AstBinary: public AstNode {
 public:
-  AstBinary(char op): op(make_binary_op(op)) {
-  };
-  Value evaluate(const ISheet& sh) override {
-    if (children.size() != 2)
-      throw AstNodeNotCompletedError{};
-    return std::visit(
-        overload{
-          [this](double a, double b)-> Value{ return (*(this->op))(a,b); },
-          [](double a, const std::string& b) -> Value { return FormulaError(FormulaError::Category::Value); },
-          [](const std::string& a, double b) -> Value { return FormulaError(FormulaError::Category::Value); },
-          [](const std::string& a, const std::string& b) -> Value { return FormulaError(FormulaError::Category::Value);},
-          [](const std::string& a, const FormulaError& b) -> Value { return b; },
-          [](const FormulaError& a, const std::string& b) -> Value { return a; },
-          [](const FormulaError& a, const FormulaError& b) -> Value { return a; },
-          [](const FormulaError& a, double b) -> Value { return a; },
-          [](double a, const FormulaError& b) -> Value { return b; }
-        }, children[0]->evaluate(sh), children[1]->evaluate(sh)
-    );
-  }
-
-  void print(std::ostream& os) const override {
-    children[0]->print_as_left_son(os, op->symbol());
-    os << op->symbol();
-    children[1]->print_as_right_son(os, op->symbol());
-  };
-  void print_as_son(std::ostream& os, char parent_op) const override {
-    if (op->symbol() == '+' || op->symbol() == '-') {
-      os << '(';
-      print(os);
-      os << ')';
-    } else
-      print(os);
-  };
-  void print_as_left_son(std::ostream& os, char parent_op) const override {
-    if (op->symbol() == '+' || op->symbol() == '-') {
-      if (parent_op == '*' || parent_op == '/') {
-        os << '(';
-        print(os);
-        os << ')';
-      } else {
-        print(os);
-      }
-    } else {
-      print(os);
-    }
-  };
-  void print_as_right_son(std::ostream& os, char parent_op) const override {
-    if (op->symbol() == '+' || op->symbol() == '-') {
-      if (parent_op == '+')
-        print(os);
-      else {
-        os << '(';
-        print(os);
-        os << ')';
-      }
-    } else {
-      if (parent_op == '/') {
-        os << '(';
-        print(os);
-        os << ')';
-      } else
-        print(os);
-    }
-  };
+  AstBinary(char op): op(make_binary_op(op)) { };
+  Value evaluate(const ISheet& sh) override;
+  void print(std::ostream& os) const override;
+  void print_as_son(std::ostream& os, char parent_op) const override;
+  void print_as_left_son(std::ostream& os, char parent_op) const override;
+  void print_as_right_son(std::ostream& os, char parent_op) const override;
 protected:
   std::unique_ptr<BinaryOP> op;
-
+private:
+  void print_in_brackets(std::ostream& os) const;
 };
 
 void PrintCellValue(std::ostream& os, const ICell::Value& val);
 
 class AstCell: public AstNode {
 public:
-  AstCell(std::string_view p): cell_ptr() {
-    auto mp = Position::FromString(p);
-    if (!mp.IsValid()) {
-      throw FormulaException{mp.ToString()};
-    }
-    pos = mp;
-  };
-
-  std::optional<Position> get_position() const override {
-    return pos;
-  }
-
-  Position* get_mutable_position() override {
-    return &pos;
-  }
-
-  ICell* get_ptr() const override {
-    return const_cast<ICell*>(cell_ptr);
-  }
-
-  void populate(const ISheet& sh) override {
-    cell_ptr = sh.GetCell(pos);
-  };
-
-  Value evaluate(const ISheet& sh) override {
-    if (cell_ptr)
-      return cell_ptr->GetValue();
-    // for separate formulas
-    auto ptr = sh.GetCell(pos);
-    if (!ptr)
-      return {0.};
-    else {
-      return ptr->GetValue();
-    }
-  }
-  Position get_pos() const {
-    return pos;
-  }
-  void maybe_insert_pos(std::vector<Position>& positions) const override {
-    positions.push_back(pos);
-  }
-
-  void print(std::ostream& os) const override {
-    if (pos.IsValid()) {
-      os << pos.ToString();
-    } else {
-      os << "#REF!";
-    }
-
-  };
-  void print_as_son(std::ostream& os, char parent_op) const override {
-    print(os);
-  };
-  void print_as_left_son(std::ostream& os, char parent_op) const override {
-    print(os);
-  };
-  void print_as_right_son(std::ostream& os, char parent_op) const override {
-    print(os);
-  } ;
+  AstCell(std::string_view p);
+  std::optional<Position> get_position() const override;
+  Position* get_mutable_position() override;
+  ICell* get_ptr() const override;
+  void populate(const ISheet& sh) override;
+  Value evaluate(const ISheet& sh) override;
+  Position get_pos() const;
+  void maybe_insert_pos(std::vector<Position>& positions) const override;
+  void print(std::ostream& os) const override;
+  void print_as_son(std::ostream& os, char parent_op) const override ;
+  void print_as_left_son(std::ostream& os, char parent_op) const override;
+  void print_as_right_son(std::ostream& os, char parent_op) const override;
 protected:
   const ICell *cell_ptr;
   Position pos;

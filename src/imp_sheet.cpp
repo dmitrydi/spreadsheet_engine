@@ -491,12 +491,10 @@ const ImpCell* ImpSheet::GetImpCell(Position pos) const {
 }
 
 void ImpSheet::PopulateFormulaPtrs(unique_ptr<ImpFormula>& formula, Position formula_pos) {
-
   if (!formula)
     return;
-  ImpFormula::UNode& ast = formula.get()->ast;
   stack<AstNode*> st;
-  st.push(ast.get());
+  st.push(formula.get()->ast.get());
   while(!st.empty()) {
     AstNode* node = st.top();
     st.pop();
@@ -510,7 +508,6 @@ void ImpSheet::PopulateFormulaPtrs(unique_ptr<ImpFormula>& formula, Position for
       st.push(ch.get());
     }
   }
-
 }
 
 pair<int, int> ImpSheet::GetInsertPosition(Position pos) const {
@@ -679,8 +676,6 @@ void ImpSheet::ResetCell(Position pos) {
   SqueezePrintableArea(pos);
 }
 
-
-
 void ImpSheet::CreateCell(Position pos, string text, unique_ptr<ImpFormula>&& formula) {
     ImpCell* ptr = GetImpCell(pos);
     if (ptr && ptr->GetText() == text)
@@ -801,4 +796,10 @@ bool ImpSheet::FormulaHasCircularRefs(Position current_pos, const std::unique_pt
   for (auto& pos: temp)
     reference_graph[current_pos].insert(move(pos));
   return false;
+}
+
+Position ImpSheet::GetInnerPosition(Position pos) const {
+  if (!pos.IsValid())
+    throw InvalidPositionException{pos.ToString()};
+  return {pos.row - LTC.row, pos.col - LTC.col};
 }

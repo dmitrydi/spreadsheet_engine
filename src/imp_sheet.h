@@ -27,7 +27,6 @@ private:
   friend class SheetTester;
   using Row = std::vector<std::unique_ptr<ImpCell>>;
   std::vector<Row> cells;
-  Size printable_size = {0,0};
 
   constexpr static const Position AbsMaxPos{Position::kMaxRows, Position::kMaxCols};
   constexpr static const Position AbsMinPos{-1, -1};
@@ -53,11 +52,7 @@ private:
   ImpCell* GetImpCell(Position pos);
   const ImpCell* GetImpCell(Position pos) const;
 
-  Position GetInnerPosition(Position pos) const {
-    if (!pos.IsValid())
-      throw InvalidPositionException{pos.ToString()};
-    return {pos.row - LTC.row, pos.col - LTC.col};
-  }
+  Position GetInnerPosition(Position pos) const;
 
   using Graph = std::unordered_map<Position, std::unordered_set<Position, PosHasher>, PosHasher>;
 
