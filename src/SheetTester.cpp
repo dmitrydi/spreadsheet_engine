@@ -14,24 +14,9 @@ void SheetTester::TestAll() {
   TestRefGraphChange();
   TestInvalidationAtChange();
   TestNoInvalidation();
-
   TestInsertRows();
   TestInsertCols();
   TestGetExpression();
-
-//  TestExpandPrintableArea();
-//  TestFirstNonzeroElement();
-//  TestLastNonzeroElement();
-//  TestFindTopOffset();
-//  TestFindBottomOffset();
-
-//  TestDeleteCell();
-//  TestClearCell();
-
-//  TestCreateCell();
-//  TestInvalidateDependencyGraph();
-//  TestUpdateDependencyGraph();
- // throw;
 }
 
 void SheetTester::TestPositionFromString() {
@@ -48,16 +33,6 @@ void SheetTester::TestPositionFromString() {
   TestRunner tr;
 
   RUN_TEST(tr, TestPositionFromString_1);
-  //throw;
-  /*
-   *     try_formula("=X0");
-    try_formula("=ABCD1");
-    try_formula("=A123456");
-    try_formula("=ABCDEFGHIJKLMNOPQRS1234567890");
-    try_formula("=XFD16385");
-    try_formula("=XFE16384");
-    try_formula("=R2D2");
-   */
 
 }
 
@@ -181,22 +156,6 @@ void SheetTester::TestSqueezePrintableArea() {
   TestRunner tr;
 
   auto TestSqueezePrintableArea_ResetOne = []() {
-    auto sheet = CreateImpSheet();
-    sheet->SetCell("A1"_ppos, "");
-    auto ptr_A1 = sheet->GetCell("A1"_ppos);
-    ASSERT(ptr_A1);
-    ASSERT(ptr_A1->GetText().empty());
-    sheet->SetCell("B2"_ppos, "t");
-    sheet->SetCell("C3"_ppos, "t");
-    ASSERT_EQUAL(sheet->LTC.ToString(), "A1");
-    ASSERT_EQUAL(sheet->RBC.ToString(), "C3");
-    ASSERT_EQUAL(sheet->printable_LTC.ToString(), "B2");
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), "C3");
-    sheet->SetCell("B2"_ppos, "");
-    ASSERT_EQUAL(sheet->printable_LTC.ToString(), "C3");
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), "C3");
-    ASSERT_EQUAL(sheet->GetPrintableSize().rows, 1);
-    ASSERT_EQUAL(sheet->GetPrintableSize().cols, 1);
   };
 
   RUN_TEST(tr, TestSqueezePrintableArea_ResetOne);
@@ -227,37 +186,16 @@ void SheetTester::TestCreateNewCell() {
 
     sheet->SetCell("B2"_ppos, "text");
     ps = sheet->GetPrintableSize();
-    ASSERT_EQUAL(ps.rows, 1);
-    ASSERT_EQUAL(ps.cols, 1);
+    ASSERT_EQUAL(ps.rows, 2);
+    ASSERT_EQUAL(ps.cols, 2);
     ASSERT_EQUAL(sheet->LTC.ToString(), "A1");
     ASSERT_EQUAL(sheet->RBC.ToString(), "B2");
-    ASSERT_EQUAL(sheet->printable_LTC.ToString(), "B2");
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), "B2");
 
     sheet->SetCell("C3"_ppos, "text");
-    ASSERT_EQUAL(sheet->GetPrintableSize().rows, 2);
-    ASSERT_EQUAL(sheet->GetPrintableSize().cols, 2);
+    ASSERT_EQUAL(sheet->GetPrintableSize().rows, 3);
+    ASSERT_EQUAL(sheet->GetPrintableSize().cols, 3);
     ASSERT_EQUAL(sheet->LTC.ToString(), "A1");
     ASSERT_EQUAL(sheet->RBC.ToString(), "C3");
-    ASSERT_EQUAL(sheet->printable_LTC.ToString(), "B2");
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), "C3");
-
-    sheet->SetCell("B2"_ppos, "");
-    ASSERT_EQUAL(sheet->printable_LTC.ToString(), "C3");
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), "C3");
-    ASSERT_EQUAL(sheet->GetPrintableSize().rows, 1);
-    ASSERT_EQUAL(sheet->GetPrintableSize().cols, 1);
-    ASSERT_EQUAL(sheet->LTC.ToString(), "A1");
-    ASSERT_EQUAL(sheet->RBC.ToString(), "C3");
-
-
-    sheet->SetCell("C3"_ppos, "");
-    ASSERT_EQUAL(sheet->GetPrintableSize().rows, 0);
-    ASSERT_EQUAL(sheet->GetPrintableSize().cols, 0);
-    ASSERT_EQUAL(sheet->LTC.ToString(), "A1");
-    ASSERT_EQUAL(sheet->RBC.ToString(), "C3");
-    ASSERT_EQUAL(sheet->printable_LTC.ToString(), ImpSheet::AbsMaxPos.ToString());
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), ImpSheet::AbsMinPos.ToString());
   };
 
   auto ResetLTC = []() {
@@ -268,44 +206,6 @@ void SheetTester::TestCreateNewCell() {
     sheet->SetCell("B3"_ppos, "t");
     ASSERT_EQUAL(sheet->GetPrintableSize().rows, 3);
     ASSERT_EQUAL(sheet->GetPrintableSize().cols, 2);
-    sheet->SetCell("A1"_ppos, "");
-    ASSERT_EQUAL(sheet->GetPrintableSize().rows, 3);
-    ASSERT_EQUAL(sheet->GetPrintableSize().cols, 2);
-    ASSERT_EQUAL(sheet->printable_LTC.ToString(), "A1");
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), "B3");
-    sheet->SetCell("B1"_ppos, "");
-    ASSERT_EQUAL(sheet->GetPrintableSize().rows, 2);
-    ASSERT_EQUAL(sheet->GetPrintableSize().cols, 2);
-    ASSERT_EQUAL(sheet->printable_LTC.ToString(), "A2");
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), "B3");
-    sheet->SetCell("A2"_ppos, "");
-    ASSERT_EQUAL(sheet->GetPrintableSize().rows, 1);
-    ASSERT_EQUAL(sheet->GetPrintableSize().cols, 1);
-    ASSERT_EQUAL(sheet->printable_LTC.ToString(), "B3");
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), "B3");
-    sheet->SetCell("B3"_ppos, "");
-    ASSERT_EQUAL(sheet->GetPrintableSize().rows, 0);
-    ASSERT_EQUAL(sheet->GetPrintableSize().cols, 0);
-    ASSERT_EQUAL(sheet->printable_LTC.ToString(), ImpSheet::AbsMaxPos.ToString());
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), ImpSheet::AbsMinPos.ToString());
-    ASSERT_EQUAL(sheet->LTC.ToString(), "A1");
-    ASSERT_EQUAL(sheet->RBC.ToString(), "B3");
-    // setting back
-    sheet->SetCell("B3"_ppos, "t");
-    ASSERT_EQUAL(sheet->GetPrintableSize().rows, 1);
-    ASSERT_EQUAL(sheet->GetPrintableSize().cols, 1);
-    ASSERT_EQUAL(sheet->printable_LTC.ToString(), "B3");
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), "B3");
-    sheet->SetCell("B1"_ppos, "t");
-    ASSERT_EQUAL(sheet->GetPrintableSize().rows, 3);
-    ASSERT_EQUAL(sheet->GetPrintableSize().cols, 1);
-    ASSERT_EQUAL(sheet->printable_LTC.ToString(), "B1");
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), "B3");
-    sheet->SetCell("A1"_ppos, "text");
-    ASSERT_EQUAL(sheet->GetPrintableSize().rows, 3);
-    ASSERT_EQUAL(sheet->GetPrintableSize().cols, 2);
-    ASSERT_EQUAL(sheet->printable_LTC.ToString(), "A1");
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), "B3");
   };
 
   auto ResetRBC = []() {
@@ -316,39 +216,6 @@ void SheetTester::TestCreateNewCell() {
     sheet->SetCell("B2"_ppos, "t");
     ASSERT_EQUAL(sheet->GetPrintableSize().rows, 3);
     ASSERT_EQUAL(sheet->GetPrintableSize().cols, 2);
-    ASSERT_EQUAL(sheet->printable_LTC.ToString(), "A1");
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), "B3");
-    sheet->SetCell("B3"_ppos, "");
-    ASSERT_EQUAL(sheet->GetPrintableSize().rows, 3);
-    ASSERT_EQUAL(sheet->GetPrintableSize().cols, 2);
-    ASSERT_EQUAL(sheet->printable_LTC.ToString(), "A1");
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), "B3");
-    sheet->SetCell("A3"_ppos, "");
-    ASSERT_EQUAL(sheet->GetPrintableSize().rows, 2);
-    ASSERT_EQUAL(sheet->GetPrintableSize().cols, 2);
-    ASSERT_EQUAL(sheet->printable_LTC.ToString(), "A1");
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), "B2");
-    sheet->SetCell("B2"_ppos, "");
-    ASSERT_EQUAL(sheet->GetPrintableSize().rows, 1);
-    ASSERT_EQUAL(sheet->GetPrintableSize().cols, 1);
-    ASSERT_EQUAL(sheet->printable_LTC.ToString(), "A1");
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), "A1");
-    sheet->SetCell("A1"_ppos, "");
-    ASSERT_EQUAL(sheet->GetPrintableSize().rows, 0);
-    ASSERT_EQUAL(sheet->GetPrintableSize().cols, 0);
-    ASSERT_EQUAL(sheet->printable_LTC.ToString(), ImpSheet::AbsMaxPos.ToString());
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), ImpSheet::AbsMinPos.ToString());
-    // setting back
-    sheet->SetCell("B3"_ppos, "t");
-    ASSERT_EQUAL(sheet->GetPrintableSize().rows, 1);
-    ASSERT_EQUAL(sheet->GetPrintableSize().cols, 1);
-    ASSERT_EQUAL(sheet->printable_LTC.ToString(), "B3");
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), "B3");
-    sheet->SetCell("A1"_ppos, "t");
-    ASSERT_EQUAL(sheet->GetPrintableSize().rows, 3);
-    ASSERT_EQUAL(sheet->GetPrintableSize().cols, 2);
-    ASSERT_EQUAL(sheet->printable_LTC.ToString(), "A1");
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), "B3");
   };
 
   auto TestDeleteLTCCol = []() {
@@ -358,46 +225,7 @@ void SheetTester::TestCreateNewCell() {
     sheet->SetCell("D2"_ppos, "t");
     ASSERT_EQUAL(sheet->LTC.ToString(), "B2");
     ASSERT_EQUAL(sheet->RBC.ToString(), "D3");
-    ASSERT_EQUAL(sheet->printable_LTC.ToString(), "B2");
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), "D3");
-    sheet->SetCell("D4"_ppos, "t");
-    ASSERT_EQUAL(sheet->GetPrintableSize().rows, 3);
-    ASSERT_EQUAL(sheet->GetPrintableSize().cols, 3);
-    ASSERT_EQUAL(sheet->LTC.ToString(), "B2");
-    ASSERT_EQUAL(sheet->RBC.ToString(), "D4");
-    ASSERT_EQUAL(sheet->printable_LTC.ToString(), "B2");
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), "D4");
-    sheet->SetCell("E3"_ppos, "t");
-    ASSERT_EQUAL(sheet->GetPrintableSize().rows, 3);
-    ASSERT_EQUAL(sheet->GetPrintableSize().cols, 4);
-    ASSERT_EQUAL(sheet->LTC.ToString(), "B2");
-    ASSERT_EQUAL(sheet->RBC.ToString(), "E4");
-    ASSERT_EQUAL(sheet->printable_LTC.ToString(), "B2");
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), "E4");
-    sheet->SetCell("B3"_ppos, "");
-    ASSERT_EQUAL(sheet->printable_LTC.ToString(), "C2");
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), "E4");
-    sheet->SetCell("C3"_ppos, "");
-    ASSERT_EQUAL(sheet->printable_LTC.ToString(), "D2");
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), "E4");
-    sheet->SetCell("D4"_ppos, "");
-    ASSERT_EQUAL(sheet->printable_LTC.ToString(), "D2");
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), "E3");
-    sheet->SetCell("D2"_ppos, "");
-    ASSERT_EQUAL(sheet->printable_LTC.ToString(), "E3");
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), "E3");
-    sheet->SetCell("E3"_ppos, "");
-    ASSERT_EQUAL(sheet->printable_LTC.ToString(), ImpSheet::AbsMaxPos.ToString());
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), ImpSheet::AbsMinPos.ToString());
-    ASSERT_EQUAL(sheet->GetPrintableSize().rows, 0);
-    ASSERT_EQUAL(sheet->GetPrintableSize().cols, 0);
-    sheet->SetCell("F3"_ppos, "");
-    ASSERT_EQUAL(sheet->printable_LTC.ToString(), ImpSheet::AbsMaxPos.ToString());
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), ImpSheet::AbsMinPos.ToString());
-    ASSERT_EQUAL(sheet->GetPrintableSize().rows, 0);
-    ASSERT_EQUAL(sheet->GetPrintableSize().cols, 0);
-    ASSERT_EQUAL(sheet->LTC.ToString(), "B2");
-    ASSERT_EQUAL(sheet->RBC.ToString(), "F4");
+
   };
 
   auto TestDeleteRBCCol = []() {
@@ -409,20 +237,7 @@ void SheetTester::TestCreateNewCell() {
     sheet->SetCell("B3"_ppos, "t");
     ASSERT_EQUAL(sheet->LTC.ToString(), "B2");
     ASSERT_EQUAL(sheet->RBC.ToString(), "E4");
-    ASSERT_EQUAL(sheet->printable_LTC.ToString(), "B2");
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), "E4");
-    sheet->SetCell("E3"_ppos, "");
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), "D4");
-    sheet->SetCell("D3"_ppos, "");
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), "C4");
-    sheet->SetCell("C4"_ppos, "");
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), "C3");
-    sheet->SetCell("C2"_ppos, "");
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), "B3");
-    ASSERT_EQUAL(sheet->printable_LTC.ToString(), "B3");
-    sheet->SetCell("B3"_ppos, "");
-    ASSERT_EQUAL(sheet->printable_LTC.ToString(), ImpSheet::AbsMaxPos.ToString());
-    ASSERT_EQUAL(sheet->printable_RBC.ToString(), ImpSheet::AbsMinPos.ToString());
+
   };
 
 
@@ -900,41 +715,7 @@ void SheetTester::TestInsertCols() {
 }
 
 void SheetTester::TestGetExpression() {
-  auto TestGetExpression_Simple = []() {
-//    auto sheet = CreateImpSheet();
-//    sheet->SetCell("A1"_ppos, "=(A2/A3)/A4");
-//    ASSERT_EQUAL(sheet->GetImpCell("A1"_ppos)->GetText(), "A2/A3/A4");
-  };
-
-  auto TestGetExpression_AfterRowDeletion = []() {
-//    auto sheet = CreateImpSheet();
-//    sheet->SetCell("A1"_ppos, "=A2+A3");
-//    sheet->SetCell("A3"_ppos, "1");
-//    sheet->DeleteRows(1, 1);
-//    ASSERT_EQUAL(sheet->GetCell("A1"_ppos)->GetText(), "+A2");
-  };
-
-  auto TestGetExpression_Tricky = []() {
-//    auto sheet = CreateImpSheet();
-//    sheet->SetCell("A1"_ppos, "1");
-//    sheet->SetCell("A2"_ppos, "2");
-//    sheet->SetCell("A3"_ppos, "3");
-//    sheet->SetCell("C3"_ppos, "=A1 + A2 + A3"); // + A1 + A3 + A1 + A2 + A1
-//
-//    cerr << get<double>(sheet->GetImpCell("C3"_ppos)->GetValue()) << endl;
-//    cerr << sheet->GetImpCell("C3"_ppos)->GetText() << endl;
-//
-////    ASSERT_EQUAL(tricky->GetReferencedCells(),
-////                 (std::vector{"A1"_pos, "A2"_pos, "A3"_pos}));
-////    ASSERT_EQUAL(tricky->GetExpression(), "A1+A2+A1+A3+A1+A2+A1");
-  };
-
-  TestRunner tr;
-  RUN_TEST(tr, TestGetExpression_Simple);
-  RUN_TEST(tr, TestGetExpression_AfterRowDeletion);
-  RUN_TEST(tr, TestGetExpression_Tricky);
-
- // throw;
+  // in main tests
 }
 
 void SheetTester::TestDeletion() {
